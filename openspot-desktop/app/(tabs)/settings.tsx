@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useTranslation } from 'react-i18next';
+import { useRouter } from 'expo-router';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemeMode, useThemeMode } from '@/hooks/theme-mode';
@@ -50,6 +51,7 @@ interface UpdateConfig {
 }
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
   const { mode, setMode } = useThemeMode();
@@ -116,6 +118,7 @@ export default function SettingsScreen() {
 
   const languageOptions: { label: string; value: string; nativeLabel: string }[] = [
     { label: 'English', value: 'en', nativeLabel: 'English' },
+    { label: 'Vietnamese', value: 'vi', nativeLabel: 'Tiếng Việt' },
     { label: 'Hindi', value: 'hi', nativeLabel: 'Hindi' },
     { label: 'Spanish', value: 'es', nativeLabel: 'Espanol' },
     { label: 'Chinese', value: 'zh', nativeLabel: 'Zhongwen' },
@@ -401,6 +404,41 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               );
             })}
+          </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>
+                {t('settings.extensions', { defaultValue: 'Extensions' })}
+              </Text>
+              <Text style={[styles.cardText, { color: theme.textSecondary }]}>
+                {t('settings.extensions_description', { defaultValue: 'Manage providers, repository packages, priority and fallback.' })}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.secondaryButton, { borderColor: theme.border }]}
+              onPress={() => router.push('/extensions')}
+            >
+              <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
+                {t('common.open', { defaultValue: 'Open' })}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>{t('settings.mix', { defaultValue: 'Mix' })}</Text>
+              <Text style={[styles.cardText, { color: theme.textSecondary }]}>{t('settings.mix_description', { defaultValue: 'Configure Crossfade, AutoMix, DJ filters and harmonic matching.' })}</Text>
+            </View>
+            <TouchableOpacity style={[styles.secondaryButton, { borderColor: theme.border }]} onPress={() => router.push('/mix')}>
+              <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>{t('common.open', { defaultValue: 'Open' })}</Text>
+              <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
           </View>
         </View>
 

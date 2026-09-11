@@ -1,0 +1,98 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+
+import { MusicPlayerContext } from './_layout';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { DEFAULT_AUTO_MIX_SETTINGS, planAutoMixTransition } from '@/lib/automix/auto-mix-algorithms';
+import { loadAutoMixSettings, saveAutoMixSettings } from '@/lib/automix/auto-mix-settings';
+import { runAutoMixParityChecks } from '@/lib/automix/auto-mix-parity-check';
+import type { AutoMixSettings, AutoMixTrack } from '@/lib/automix/auto-mix-types';
+import type { Track } from '@/types/music';
+
+const DURATION_OPTIONS: Array<AutoMixSettings['durationMs']> = ['auto', 5_000, 10_000, 15_000, 20_000, 30_000, 45_000];
+
+function toAutoMixTrack(track: Track | null): AutoMixTrack | null {
+  if (!track) return null;
+  const candidate = track as Track & { audioMeta?: AutoMixTrack['audioMeta']; isVideo?: boolean };
+  return { id: String(track.id), durationMs: track.duration, albumId: track.albumId, isVideo: candidate.isVideo === true, audioMeta: candidate.audioMeta ?? null };
+}
+
+export default function MixScreen() {
+  const { t } = useTranslation();
+  const { currentTrack, musicQueue } = React.useContext(MusicPlayerContext);
+  const isDark = useColorScheme() !== 'light';
+  const [settings, setSettings] = useState<AutoMixSettings>(DEFAULT_AUTO_MIX_SETTINGS);
+  const [loaded, setLoaded] = useState(false);
+  const [parityPassed, setParityPassed] = useState<boolean | null>(null);
+
+  const theme = useMemo(() => ({
+    background: isDark ? '#050505' : '#f5efe6', surface: isDark ? '#121212' : '#fffaf2', elevated: isDark ? '#1b1b1b' : '#efe4d6',
+    text: isDark ? '#fff' : '#2d2219', secondary: isDark ? '#a9a9a9' : '#7a6251', border: isDark ? '#2b2b2b' : '#e4d5c5', accent: isDark ? '#1DB954' : '#167c3a',
+  }), [isDark]);
+  const text = useCallback((key: string, fallback: string) => t(key, { defaultValue: fallback }), [t]);
+
+  useEffect(() => { loadAutoMixSettings().then((value) => { setSettings(value); setLoaded(true); }).catch(() => setLoaded(true)); }, []);
+  const update = useCallback((change: Partial<AutoMixSettings>) => {
+    setSettings((previous) => { const next = { ...previous, ...change }; void saveAutoMixSettings(next); return next; });
+  }, []);
+
+  const current = toAutoMixTrack(currentTrack);
+  const next = currentTrack && musicQueue.currentIndex >= 0 ? toAutoMixTrack(musicQueue.tracks[musicQueue.currentIndex + 1] ?? null) : null;
+  const plan = current ? planAutoMixTransition(current, next, settings) : null;
+  const formatDuration = (duration: AutoMixSettings['durationMs']) => duration === 'auto' ? text('mix.auto', 'Auto') : `${Number(duration) / 1000}s`;
+  const trackLabel = (track: Track | null) => track ? `${track.title} · ${track.artist}` : text('mix.no_track', 'No track playing');
+  const metaLabel = (track: AutoMixTrack | null) => {
+    if (!track?.audioMeta) return text('mix.metadata_pending', 'BPM / key pending');
+    const bpm = track.audioMeta.bpm ? `${track.audioMeta.bpm} BPM` : 'BPM —';
+    const key = track.audioMeta.key ? `${track.audioMeta.key} ${track.audioMeta.keyScale ?? ''}`.trim() : 'Key —';
+    return `${bpm} · ${key}`;
+  };
+
+  return (
+    <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
+      <View style={styles.titleRow}><View><Text style={[styles.eyebrow, { color: theme.accent }]}>{text('mix.eyebrow', 'PLAYBACK')}</Text><Text style={[styles.title, { color: theme.text }]}>{text('mix.title', 'Mix')}</Text></View><Ionicons name="shuffle" size={30} color={theme.accent} /></View>
+      <Text style={[styles.subtitle, { color: theme.secondary }]}>{text('mix.subtitle', 'Blend the next track with a beat-aware transition.')}</Text>
+
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>{text('mix.mode', 'Transition mode')}</Text>
+        <View style={styles.segmentRow}>{(['off', 'crossfade', 'automix'] as const).map((mode) => <TouchableOpacity key={mode} onPress={() => update({ mode })} style={[styles.segment, { backgroundColor: theme.elevated, borderColor: theme.border }, settings.mode === mode && { backgroundColor: theme.accent, borderColor: theme.accent }]}><Text style={[styles.segmentText, { color: settings.mode === mode ? '#fff' : theme.secondary }]}>{mode === 'off' ? text('mix.off', 'Off') : mode === 'crossfade' ? text('mix.crossfade', 'Crossfade') : 'AutoMix'}</Text></TouchableOpacity>)}</View>
+      </View>
+
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>{text('mix.transition_duration', 'Transition duration')}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.durationRow}>{DURATION_OPTIONS.map((duration) => <TouchableOpacity key={String(duration)} onPress={() => update({ durationMs: duration })} style={[styles.durationChip, { backgroundColor: theme.elevated, borderColor: theme.border }, settings.durationMs === duration && { backgroundColor: theme.accent, borderColor: theme.accent }]}><Text style={{ color: settings.durationMs === duration ? '#fff' : theme.secondary, fontWeight: '700' }}>{formatDuration(duration)}</Text></TouchableOpacity>)}</ScrollView>
+        <SettingRow label={text('mix.dj_mode', 'DJ filter')} hint={text('mix.dj_mode_hint', 'Low-pass outgoing and high-pass incoming')} value={settings.djMode} onChange={(value) => update({ djMode: value })} theme={theme} />
+        <SettingRow label={text('mix.bpm_matching', 'BPM matching')} hint={text('mix.bpm_matching_hint', 'Normalize safe half-time/double-time ratios')} value={settings.bpmMatching} onChange={(value) => update({ bpmMatching: value })} theme={theme} disabled={settings.mode !== 'automix'} />
+        <SettingRow label={text('mix.harmonic_matching', 'Harmonic matching')} hint={text('mix.harmonic_matching_hint', 'Use Camelot key distance and small pitch shifts')} value={settings.harmonicMatching} onChange={(value) => update({ harmonicMatching: value })} theme={theme} disabled={settings.mode !== 'automix'} />
+        <SettingRow label={text('mix.skip_same_album', 'Skip same-album crossfade')} hint={text('mix.skip_same_album_hint', 'Keep album sequencing uninterrupted')} value={settings.skipSameAlbum} onChange={(value) => update({ skipSameAlbum: value })} theme={theme} />
+        <SettingRow label={text('mix.show_meta', 'Show BPM and key')} hint={text('mix.show_meta_hint', 'Expose transition metadata in Mix')} value={settings.showMeta} onChange={(value) => update({ showMeta: value })} theme={theme} />
+      </View>
+
+      <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>{text('mix.now_playing', 'Now mixing')}</Text>
+        <TrackPair track={currentTrack} label={text('mix.current', 'Current')} meta={metaLabel(current)} theme={theme} />
+        <View style={[styles.arrow, { borderColor: theme.border }]}><Ionicons name="arrow-down" size={18} color={theme.accent} /></View>
+        <TrackPair track={musicQueue.tracks[musicQueue.currentIndex + 1] ?? null} label={text('mix.next', 'Next')} meta={metaLabel(next)} theme={theme} />
+        <View style={[styles.plan, { backgroundColor: theme.elevated }]}><Text style={{ color: theme.text, fontWeight: '700' }}>{plan?.enabled ? text('mix.ready', 'Ready') : text('mix.waiting', 'Waiting')}</Text><Text style={{ color: theme.secondary, marginTop: 4 }}>{plan ? `${plan.reason} · ${formatDuration(plan.durationMs)}${plan.beatCount ? ` · ${plan.beatCount} beats` : ''}` : loaded ? text('mix.no_track', 'No track playing') : text('common.loading', 'Loading...')}</Text></View>
+      </View>
+
+      <TouchableOpacity style={[styles.checkButton, { borderColor: theme.border }]} onPress={() => setParityPassed(runAutoMixParityChecks().passed)}><Ionicons name={parityPassed ? 'checkmark-circle' : 'pulse'} size={18} color={parityPassed ? theme.accent : theme.secondary} /><Text style={{ color: theme.text, fontWeight: '700' }}>{parityPassed === null ? text('mix.run_checks', 'Run AutoMix parity checks') : parityPassed ? text('mix.checks_passed', 'Parity checks passed') : text('mix.checks_failed', 'Parity checks need attention')}</Text></TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+function SettingRow({ label, hint, value, onChange, theme, disabled = false }: { label: string; hint: string; value: boolean; onChange: (value: boolean) => void; theme: Record<string, string>; disabled?: boolean }) {
+  return <View style={[styles.settingRow, { borderTopColor: theme.border, opacity: disabled ? 0.45 : 1 }]}><View style={{ flex: 1, paddingRight: 12 }}><Text style={{ color: theme.text, fontWeight: '700' }}>{label}</Text><Text style={{ color: theme.secondary, fontSize: 12, marginTop: 3 }}>{hint}</Text></View><Switch value={value} onValueChange={onChange} disabled={disabled} trackColor={{ false: theme.border, true: theme.accent }} /> </View>;
+}
+
+function TrackPair({ track, label, meta, theme }: { track: Track | null; label: string; meta: string; theme: Record<string, string> }) {
+  const artwork = track ? track.images?.thumbnail || track.albumCover : null;
+  return <View style={styles.trackRow}>{artwork ? <Image source={{ uri: artwork }} style={styles.artwork} /> : <View style={[styles.artwork, styles.artworkFallback, { backgroundColor: theme.elevated }]}><Ionicons name="musical-note" size={22} color={theme.secondary} /></View>}<View style={{ flex: 1 }}><Text style={[styles.label, { color: theme.accent }]}>{label}</Text><Text numberOfLines={1} style={{ color: theme.text, fontWeight: '700', marginTop: 3 }}>{track ? track.title : '—'}</Text><Text numberOfLines={1} style={{ color: theme.secondary, fontSize: 12, marginTop: 2 }}>{track ? track.artist : meta}</Text>{track && <Text style={{ color: theme.secondary, fontSize: 11, marginTop: 5 }}>{meta}</Text>}</View></View>;
+}
+
+const styles = StyleSheet.create({
+  content: { padding: 20, paddingBottom: 120 }, titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }, title: { fontSize: 32, fontWeight: '800', marginTop: 4 }, subtitle: { fontSize: 14, lineHeight: 20, marginTop: 8, marginBottom: 18 }, card: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 14 }, sectionTitle: { fontSize: 16, fontWeight: '800', marginBottom: 13 }, segmentRow: { flexDirection: 'row', gap: 8 }, segment: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 12, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 }, segmentText: { fontWeight: '800', fontSize: 12 }, durationRow: { gap: 8, paddingBottom: 6 }, durationChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 13, paddingVertical: 9 }, settingRow: { borderTopWidth: 1, paddingTop: 13, marginTop: 13, flexDirection: 'row', alignItems: 'center' }, trackRow: { flexDirection: 'row', alignItems: 'center', minHeight: 70 }, artwork: { width: 58, height: 58, borderRadius: 10, marginRight: 12 }, artworkFallback: { justifyContent: 'center', alignItems: 'center' }, label: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' }, arrow: { borderTopWidth: 1, borderBottomWidth: 1, alignItems: 'center', paddingVertical: 5, marginVertical: 9 }, plan: { borderRadius: 12, padding: 12, marginTop: 15 }, checkButton: { borderWidth: 1, borderRadius: 14, minHeight: 48, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 9 },
+});

@@ -15,6 +15,7 @@ const MAPPING = {
   'books.vertical.fill': 'library-books',
   'arrow.down.circle.fill': 'download',
   'gearshape.fill': 'settings',
+  'shuffle': 'shuffle',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',

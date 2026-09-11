@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
+import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
 
 interface PlatformUpdateConfig {
   latest_version: string;
@@ -123,6 +124,10 @@ export default function TabLayout() {
     };
     void checkUpdateOnStart();
   }, [currentVersion]);
+
+  useEffect(() => {
+    void syncExtensionProviders().catch((error) => console.warn('[Extensions] provider sync unavailable:', error));
+  }, []);
 
   const pendingAutoPlayRef = useRef(false);
 
@@ -249,8 +254,14 @@ export default function TabLayout() {
             <Tabs.Screen
               name="search"
               options={{
-                title: t('tabs.search'),
-                tabBarIcon: ({ color }) => <IconSymbol size={28} name="magnifyingglass" color={color} />,
+                href: null,
+              }}
+            />
+            <Tabs.Screen
+              name="mix"
+              options={{
+                title: t('tabs.mix', { defaultValue: 'Mix' }),
+                tabBarIcon: ({ color }) => <IconSymbol size={28} name="shuffle" color={color} />,
               }}
             />
             <Tabs.Screen
@@ -273,6 +284,10 @@ export default function TabLayout() {
                 title: t('settings.settings'),
                 tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
               }}
+            />
+            <Tabs.Screen
+              name="extensions"
+              options={{ href: null }}
             />
             <Tabs.Screen
               name="media/[type]/[id]"

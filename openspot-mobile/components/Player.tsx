@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
 } from 'react-native';
-import TrackPlayer, { Capability, Event, State, useProgress } from 'react-native-track-player';
+import TrackPlayer, { Event, State, useProgress } from 'react-native-track-player';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,6 +25,7 @@ import { FullScreenPlayer } from './FullScreenPlayer';
 import { useLikedSongs } from '../hooks/useLikedSongs';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
+import { ensureTrackPlayerReady, releaseTrackPlayer, withPlaybackRetry } from '@/lib/playback/track-player-runtime';
 
 interface PlayerProps {
   track: Track | null;
@@ -113,27 +114,7 @@ export function Player({
     const setupPlayer = async () => {
       try {
         if (!playerReadyRef.current) {
-          try {
-            await TrackPlayer.setupPlayer();
-          } catch (setupError: any) {
-            if (!setupError?.message?.includes('already been initialized')) {
-              throw setupError;
-            }
-          }
-          
-          await TrackPlayer.reset();
-          await TrackPlayer.updateOptions({
-            capabilities: [
-              Capability.Play,
-              Capability.Pause,
-              Capability.SkipToNext,
-              Capability.SkipToPrevious,
-              Capability.SeekTo,
-              Capability.Stop,
-            ],
-            compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
-          });
-          await TrackPlayer.setVolume(volume);
+          await ensureTrackPlayerReady(volume);
           playerReadyRef.current = true;
           if (isMountedRef.current) {
             setPlayerReady(true);
@@ -162,8 +143,7 @@ export function Player({
         clearTimeout(queueBuildDebounceRef.current);
       }
       stopRotation();
-      TrackPlayer.stop().catch(() => {});
-      TrackPlayer.reset().catch(() => {});
+      releaseTrackPlayer().catch(() => {});
     };
   }, []);
 
@@ -245,7 +225,7 @@ export function Player({
         }
       }
     } catch {}
-    return MusicAPI.getStreamUrl(t.id.toString(), t);
+    return withPlaybackRetry('resolve_stream', () => MusicAPI.getStreamUrl(t.id.toString(), t));
   };
 
   

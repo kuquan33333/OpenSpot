@@ -4,7 +4,7 @@ import { Player } from '@/components/Player';
 import { QueueDisplay } from '@/components/QueueDisplay';
 import { useMusicQueue } from '@/hooks/useMusicQueue';
 import { HapticTab } from '@/components/HapticTab';
-import { HomeTabIcon, SearchTabIcon, LibraryTabIcon, DownloadTabIcon, SettingsTabIcon } from '@/components/TabIcons';
+import { HomeTabIcon, MixTabIcon, LibraryTabIcon, DownloadTabIcon, SettingsTabIcon } from '@/components/TabIcons';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Track } from '@/types/music';
@@ -20,6 +20,7 @@ import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
 import { setupMediaSession, updateMediaSession } from '@/lib/media-session';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
 
 interface UpdateConfig {
   latest_version: string;
@@ -115,6 +116,10 @@ export default function TabLayout() {
     };
     void checkUpdateOnStart();
   }, [currentVersion]);
+
+  useEffect(() => {
+    void syncExtensionProviders().catch((error) => console.warn('[Extensions] provider sync unavailable:', error));
+  }, []);
 
   const pendingAutoPlayRef = useRef(false);
 
@@ -271,8 +276,14 @@ export default function TabLayout() {
             <Tabs.Screen
               name="search"
               options={{
-                title: t('tabs.search'),
-                tabBarIcon: ({ color }) => <SearchTabIcon color={color} size={28} />,
+                href: null,
+              }}
+            />
+            <Tabs.Screen
+              name="mix"
+              options={{
+                title: t('tabs.mix', { defaultValue: 'Mix' }),
+                tabBarIcon: ({ color }) => <MixTabIcon color={color} size={28} />,
               }}
             />
             <Tabs.Screen
@@ -295,6 +306,10 @@ export default function TabLayout() {
                 title: t('settings.settings'),
                 tabBarIcon: ({ color }) => <SettingsTabIcon color={color} size={28} />,
               }}
+            />
+            <Tabs.Screen
+              name="extensions"
+              options={{ href: null }}
             />
             <Tabs.Screen
               name="media/[type]/[id]"

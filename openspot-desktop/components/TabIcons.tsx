@@ -22,6 +22,14 @@ export function SearchTabIcon({ color, size = 24 }: TabIconProps) {
   );
 }
 
+export function MixTabIcon({ color, size = 24 }: TabIconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M7 4h3v2H7v3h3v2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm7 0h3a2 2 0 0 1 2 2v3h-2V6h-3V4zM7 13h3v2H7v3h3v2H7a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2zm10 0h2v3a2 2 0 0 1-2 2h-3v-2h3v-3zM10 9h4v6h-4V9z" fill={color} />
+    </Svg>
+  );
+}
+
 export function LibraryTabIcon({ color, size = 24 }: TabIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">

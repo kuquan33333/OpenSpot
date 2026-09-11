@@ -5,6 +5,7 @@ export type PlaybackDiagnosticType =
   | 'PLAYER_SETUP_READY'
   | 'PLAYER_SETUP_ERROR'
   | 'PLAYER_COMMAND_ERROR'
+  | 'PLAYER_RETRY'
   | 'PLAYER_RELEASED';
 
 export interface PlaybackDiagnosticEvent {
@@ -93,6 +94,25 @@ export async function runPlayerCommand<T>(name: string, command: () => Promise<T
     pushDiagnostic({ type: 'PLAYER_COMMAND_ERROR', message, data: { command: name } });
     throw error;
   }
+}
+
+function isRetryablePlaybackError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /401|403|404|408|425|429|5\d\d|timeout|network|expired|fetch|socket/i.test(message);
+}
+
+export async function withPlaybackRetry<T>(name: string, command: () => Promise<T>, maxRetries = 2): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try { return await command(); }
+    catch (error) {
+      lastError = error;
+      if (attempt >= maxRetries || !isRetryablePlaybackError(error)) throw error;
+      pushDiagnostic({ type: 'PLAYER_RETRY', message: error instanceof Error ? error.message : String(error), data: { command: name, attempt: attempt + 1 } });
+      await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Playback command failed: ${name}`);
 }
 
 export async function releaseTrackPlayer(): Promise<void> {
