@@ -5,7 +5,7 @@ on:
 
 jobs:
   go-core-check:
-    name: Extension Core - gofmt vet test
+    name: Extension Core - boundary gofmt vet test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -16,6 +16,17 @@ jobs:
         with:
           go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
           cache: false
+      - name: Extension boundary guard
+        run: |
+          set -euo pipefail
+          test ! -e exports_download.go || { echo 'App-level SpotiFLAC exports_download.go must stay outside Extension Core'; exit 1; }
+          test ! -e extension_fallback.go || { echo 'App-level download fallback orchestration must stay outside Extension Core'; exit 1; }
+          test ! -e extension_fallback_helpers.go || { echo 'App-level download fallback helpers must stay outside Extension Core'; exit 1; }
+          banned='GetDeezerMetadata\(|globalLyricsCache|DownloadWithExtensionFallback\(|applySongLinkRegionFromRequest\(|NewBuiltinLyricsProvider\('
+          if grep -R -n -E --include='*.go' "$banned" .; then
+            echo 'Extension Core depends on a SpotiFLAC application-level service.'
+            exit 1
+          fi
       - name: Resolve modules
         run: go mod tidy
       - name: Go format check
