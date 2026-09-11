@@ -1,11 +1,7 @@
 name: Fix Current Check Errors - One Shot
 
 on:
-  push:
-    branches:
-      - feature/openspot-vnext-extension-automix
-    paths:
-      - .github/workflows/fix-check-errors-once.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,24 +11,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: feature/openspot-vnext-extension-automix
-      - name: Restore exact upstream manager field spelling
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('third_party/spotiflac-extension-core/upstream/extension_manager.go')
-          text = p.read_text()
-          count = text.count('extsions')
-          if count == 0:
-              raise SystemExit('No extsions typo found; refusing an empty patch')
-          p.write_text(text.replace('extsions', 'extensions'))
-          print(f'Restored {count} upstream field references')
-          PY
-      - name: Commit manager parity fix
-        run: |
-          git config user.name "todo996"
-          git config user.email "kuquan55555@gmail.com"
-          git add third_party/spotiflac-extension-core/upstream/extension_manager.go
-          git commit -m "fix: restore SpotiFLAC extension manager parity"
-          git push origin HEAD:feature/openspot-vnext-extension-automix
+      - name: No-op safety guard
+        run: echo "One-shot patch completed; automatic execution is disabled."
