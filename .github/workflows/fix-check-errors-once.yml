@@ -1,11 +1,7 @@
 name: Fix Current Check Errors - One Shot
 
 on:
-  push:
-    branches:
-      - feature/openspot-vnext-extension-automix
-    paths:
-      - .github/workflows/fix-check-errors-once.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,53 +13,5 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature/openspot-vnext-extension-automix
-      - name: Apply narrow TypeScript fixes
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text()
-              if old not in text:
-                  raise SystemExit(f'Expected text not found in {path}: {old[:80]!r}')
-              p.write_text(text.replace(old, new, 1))
-
-          replace_once(
-              'openspot-mobile/components/FullScreenPlayer.tsx',
-              '  onPlaylistsUpdated?: () => void;\n}',
-              '  onPlaylistsUpdated?: () => void;\n  onShare?: () => void;\n}'
-          )
-
-          old_artist = """  const handleArtistPress = useCallback(() => {\n    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);\n    onClose();\n    router.push({\n      pathname: '/search',\n      params: { q: track.artist, type: 'artist' }\n    });\n  }, [router, track?.artist, onClose]);"""
-          new_artist = """  const handleArtistPress = useCallback(() => {\n    if (!track) return;\n    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);\n    onClose();\n    router.push({\n      pathname: '/search',\n      params: { q: track.artist, type: 'artist' }\n    });\n  }, [router, track, onClose]);"""
-          replace_once('openspot-mobile/components/FullScreenPlayer.tsx', old_artist, new_artist)
-          replace_once('openspot-desktop/components/FullScreenPlayer.tsx', old_artist, new_artist)
-
-          replace_once(
-              'openspot-desktop/app/(tabs)/_layout.tsx',
-              "getCurrentWindow().setTheme(isDark ? 'Dark' : 'Light');",
-              "getCurrentWindow().setTheme(isDark ? 'dark' : 'light');"
-          )
-
-          replace_once(
-              'openspot-mobile/lib/api.ts',
-              "const JIO_SAAVN_API_URL = process.env.EXPO_PUBLIC_API_BASE_URL;",
-              "const getJioSaavnApiUrl = (): string => {\n  const value = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();\n  if (!value) {\n    throw new Error('EXPO_PUBLIC_API_BASE_URL is not configured');\n  }\n  return value;\n};"
-          )
-          replace_once(
-              'openspot-mobile/lib/api.ts',
-              '  const url = new URL(JIO_SAAVN_API_URL);',
-              '  const url = new URL(getJioSaavnApiUrl());'
-          )
-          PY
-      - name: Commit fixes
-        run: |
-          git config user.name "todo996"
-          git config user.email "kuquan55555@gmail.com"
-          git add openspot-mobile/components/FullScreenPlayer.tsx \
-                  openspot-desktop/components/FullScreenPlayer.tsx \
-                  'openspot-desktop/app/(tabs)/_layout.tsx' \
-                  openspot-mobile/lib/api.ts
-          git commit -m "fix: resolve current TypeScript check errors"
-          git push origin HEAD:feature/openspot-vnext-extension-automix
+      - name: No-op safety guard
+        run: echo "This one-shot patch workflow has already been consumed and is disabled for automatic runs."
