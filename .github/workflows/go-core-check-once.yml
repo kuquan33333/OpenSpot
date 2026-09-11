@@ -1,13 +1,8 @@
-name: Extension Core - One Shot Check
+name: Extension Core - Manual Check
 
 on:
-  push:
-    branches:
-      - feature/openspot-vnext-extension-automix
-    paths:
-      - .github/workflows/go-core-check-once.yml
+  workflow_dispatch:
 
-# One-shot rerun after restoring SpotiFLAC app version bridge.
 jobs:
   go-core-check:
     name: Extension Core - gofmt vet test
