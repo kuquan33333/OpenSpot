@@ -126,7 +126,8 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            ONLY_ACTIVE_ARCH=NO
+            ONLY_ACTIVE_ARCH=NO \
+            SWIFT_ENABLE_EXPLICIT_MODULES=NO
 
       - name: Verify bundle inside app
         run: |
