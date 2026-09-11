@@ -30,14 +30,14 @@ import (
 )
 
 const (
-	signedSessionRefreshSkew            = time.Hour
-	signedSessionExchangeMaxAttempts    = 3
-	signedSessionMaxRetryAfter          = 5 * time.Minute
-	signedSessionMaxSessionRetries      = 1
-	signedSessionMaxProviderRetries     = 2
-	signedSessionProviderRetryDelay     = time.Second
-	signedSessionExchangeTimeout        = DefaultJSTimeout
-	signedSessionResponseBodyLimit int64 = 8 << 20
+	signedSessionRefreshSkew               = time.Hour
+	signedSessionExchangeMaxAttempts       = 3
+	signedSessionMaxRetryAfter             = 5 * time.Minute
+	signedSessionMaxSessionRetries         = 1
+	signedSessionMaxProviderRetries        = 2
+	signedSessionProviderRetryDelay        = time.Second
+	signedSessionExchangeTimeout           = DefaultJSTimeout
+	signedSessionResponseBodyLimit   int64 = 8 << 20
 )
 
 var (
