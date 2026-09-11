@@ -1,0 +1,53 @@
+name: Extension Core - Format and Diagnose Once
+
+on:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - '.github/workflows/go-format-diagnose-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format-diagnose:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: third_party/spotiflac-extension-core/upstream
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/openspot-vnext-extension-automix
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: false
+      - name: Format Go source
+        run: gofmt -w extension_host_metadata.go
+      - name: Commit gofmt if needed
+        working-directory: .
+        run: |
+          if git diff --quiet; then
+            echo 'No gofmt diff.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add third_party/spotiflac-extension-core/upstream/extension_host_metadata.go
+            git commit -m 'style(extension): gofmt host metadata adapter'
+            git push origin HEAD:feature/openspot-vnext-extension-automix
+          fi
+      - name: Resolve modules
+        run: go mod tidy
+      - name: Compile diagnostics
+        run: |
+          set +e
+          echo '=== go vet ==='
+          go vet ./...
+          vet_status=$?
+          echo '=== go test ==='
+          go test ./...
+          test_status=$?
+          echo "vet_status=$vet_status test_status=$test_status"
+          if [ "$vet_status" -ne 0 ] || [ "$test_status" -ne 0 ]; then exit 1; fi
