@@ -127,6 +127,30 @@ async fn proxy_http(
   }))
 }
 
+// Stable command boundary for the shared OpenSpot Extension Core contract.
+// The Go runtime is linked by the native mobile build first; desktop can use
+// this channel without changing its TypeScript-facing API while the Tauri
+// sidecar binding is enabled.
+#[tauri::command]
+fn extension_core_call(
+  operation: String,
+  payload: Option<serde_json::Value>,
+) -> Result<String, String> {
+  let _ = payload;
+  if operation == "status" {
+    return Ok(serde_json::json!({
+      "available": false,
+      "reason": "Extension Core native runtime is not linked in this desktop build"
+    })
+    .to_string());
+  }
+
+  Err(format!(
+    "Extension Core operation '{}' is unavailable until the native runtime is linked",
+    operation
+  ))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -137,7 +161,8 @@ pub fn run() {
       delete_offline_file,
       read_offline_file,
       offline_file_exists,
-      proxy_http
+      proxy_http,
+      extension_core_call
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
