@@ -1,0 +1,31 @@
+name: Extension Core - One Shot Check
+
+on:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - .github/workflows/go-core-check-once.yml
+
+jobs:
+  go-core-check:
+    name: Extension Core - gofmt vet test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: third_party/spotiflac-extension-core/upstream
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: false
+      - name: Resolve modules
+        run: go mod tidy
+      - name: Go format check
+        run: |
+          test -z "$(gofmt -l .)" || { echo 'Go files need gofmt:'; gofmt -l .; exit 1; }
+      - name: Go vet
+        run: go vet ./...
+      - name: Go test
+        run: go test ./...
