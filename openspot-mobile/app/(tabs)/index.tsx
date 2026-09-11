@@ -77,6 +77,7 @@ export default function HomeScreen() {
 
   const languageOptions: { label: string; value: string; nativeLabel: string }[] = [
     { label: 'English', value: 'en', nativeLabel: 'English' },
+    { label: 'Vietnamese', value: 'vi', nativeLabel: 'Tiếng Việt' },
     { label: 'Hindi', value: 'hi', nativeLabel: 'Hindi' },
     { label: 'Spanish', value: 'es', nativeLabel: 'Espanol' },
     { label: 'Chinese', value: 'zh', nativeLabel: 'Zhongwen' },

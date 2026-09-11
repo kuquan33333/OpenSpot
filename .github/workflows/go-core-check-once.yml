@@ -1,6 +1,7 @@
 name: Extension Core - One Shot Check
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feature/openspot-vnext-extension-automix

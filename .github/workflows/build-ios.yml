@@ -103,11 +103,12 @@ jobs:
 
       - name: Verify bundle inside app
         run: |
-          APP_PATH=$(find ios/build/OpenSpot.xcarchive/Products/Applications -name "*.app" | head -1)
+          cd ios
+          APP_PATH=$(find build/OpenSpot.xcarchive/Products/Applications -name "*.app" | head -1)
           echo "App: $APP_PATH"
           if [ ! -f "$APP_PATH/main.jsbundle" ]; then
             echo "Copiando bundle manualmente..."
-            cp ios/main.jsbundle "$APP_PATH/main.jsbundle"
+            cp main.jsbundle "$APP_PATH/main.jsbundle"
           fi
           ls -la "$APP_PATH"
 

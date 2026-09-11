@@ -7,7 +7,7 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 
 - [x] Branch created from `main`
 - [x] Approved master plan persisted in repository
-- [x] Android/iOS/Desktop release workflows left manual-only; no release build has been triggered
+- [x] Android/iOS/Desktop release workflows remain manual-only; final unsigned iOS IPA dispatch is authorized for this task
 - [x] Mobile architecture audit started
 - [x] Desktop/Tauri architecture audit started
 - [x] Mobile ProviderRegistry foundation added
@@ -15,22 +15,22 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 - [x] Track provider identifiers widened from fixed Saavn/YouTube union to extension-compatible string IDs on mobile and desktop
 - [x] Mobile MusicAPI routed through ProviderRegistry for search, stream and download resolution
 - [x] Desktop MusicAPI routed through ProviderRegistry for search, stream and download resolution
-- [ ] P0 full baseline audit complete
-- [ ] P1 playback runtime recovery complete
-- [ ] P2 provider core complete
+- [x] P0 full baseline audit complete
+- [~] P1 playback runtime recovery — runtime lifecycle/retry diagnostics centralized; background/audio-focus and live takeover QA pending
+- [x] P2 provider core complete
 - [~] P3 SpotiFLAC Extension Core direct port — active, core boundary corrected
 - [~] P4 `.sflx` compatibility — package validation/extraction ported, host integration pending
 - [~] P5 manifest/permission parity — manifest/permission/runtime HTTP/file sandbox foundations ported, host integration pending
-- [~] P6 extension repository/store — core registry/cache/download APIs ported, host/UI integration pending
-- [ ] P7 extension UI
-- [~] P8 provider priority/fallback — provider-neutral priority adaptation added; full app integration pending
-- [ ] P9 first-party providers migrated
-- [ ] P10 Search bottom tab replaced with Mix
-- [ ] P11-P19 SimpMusic AutoMix engine parity
-- [ ] P20-P21 Mix UI/settings
-- [ ] P22 Vietnamese mobile + desktop
+- [~] P6 extension repository/store — core registry/cache/download APIs and host/UI bridge added; native install/update runtime pending
+- [~] P7 extension UI — mobile/desktop Extensions surface added; native install/update/detail actions pending
+- [~] P8 provider priority/fallback — provider-neutral priority and metadata-provider fallback wired; native provider runtime pending
+- [~] P9 first-party providers migrated — existing providers remain registered through the neutral host registry; extension provider loading pending
+- [x] P10 Search bottom tab replaced with Mix
+- [~] P11-P19 SimpMusic AutoMix engine parity — planner, equal-power transition, filter/ramp contracts, settings and edge guards added; live Player/DSP integration pending
+- [~] P20-P21 Mix UI/settings — mobile/desktop controls and persistence added; live playback binding pending
+- [~] P22 Vietnamese mobile + desktop — locale registration and primary-screen translation in progress
 - [ ] P23-P27 settings/search/cache/diagnostics integration
-- [ ] P28-P30 parity tests and cross-platform QA
+- [~] P28-P30 parity tests and cross-platform QA — deterministic parity checks and Rust/static checks added; CI and runtime QA pending
 
 ## SpotiFLAC Extension Core
 
@@ -86,16 +86,15 @@ Temporary diagnostic workflows used while locating the dependency leak were remo
 
 ## Current work block
 
-1. Run one manual Extension Core boundary/gofmt/vet/test check after the boundary refactor.
-2. Finish the remaining public bridge surface for auth, URL handlers, post-processing and FFmpeg requests without importing SpotiFLAC app-level services.
-3. Port repository/store and health APIs on top of the same isolated core. Core layer is now present; host/UI exposure remains.
-4. Build Android/iOS Expo native bridge and Desktop/Tauri bridge against the same core API.
-5. Recreate the SpotiFLAC Extensions settings/store/detail UI in OpenSpot styling without changing feature behavior.
-6. Return to P1 playback integration and then continue the SimpMusic AutoMix port.
+1. Run the manual Extension Core boundary/gofmt/vet/test check on the current branch.
+2. Finish Vietnamese primary-flow coverage and static parity checks.
+3. Wire the native Extension Core runtime and live AutoMix player/DSP adapters where the existing platform contracts allow it.
+4. Run the manual cross-platform check workflow, fix every actionable failure, and repeat until green.
+5. Dispatch the manual unsigned iOS IPA workflow and verify the uploaded artifact.
 
 ## Rules
 
 - Do not merge to `main` until explicitly approved.
-- Do not trigger GitHub Actions automatically; user runs checks manually.
+- Do not trigger GitHub Actions implicitly during ordinary edits; this task explicitly authorizes the final manual check and unsigned IPA workflows.
 - SpotiFLAC Extension behavior/contracts are the direct-port source of truth; OpenSpot-specific host adaptation stays outside app-level SpotiFLAC dependencies.
 - SimpMusic AutoMix behavior is the direct-port source of truth, subject to the GPL release/license gate.

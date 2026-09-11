@@ -11,6 +11,7 @@ import es from '../locales/es.json';
 import fr from '../locales/fr.json';
 import tr from '../locales/tr.json';
 import ko from '../locales/ko.json';
+import vi from '../locales/vi.json';
 
 const resources = {
   en: { translation: en },
@@ -24,6 +25,7 @@ const resources = {
   he: { translation: he },
   tr: { translation: tr },
   ko: { translation: ko },
+  vi: { translation: vi },
 };
 
 // eslint-disable-next-line import/no-named-as-default-member

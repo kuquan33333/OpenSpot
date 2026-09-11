@@ -9,13 +9,16 @@
     "search": "Search",
     "back": "Back",
     "close": "Close",
-    "done": "Done"
+    "done": "Done",
+    "open": "Open",
+    "show_more": "Show More"
   },
   "tabs": {
     "home": "Home",
     "search": "Search",
     "library": "Library",
-    "downloads": "Downloads"
+    "downloads": "Downloads",
+    "mix": "Mix"
   },
   "home": {
     "trending": "Trending",
@@ -192,6 +195,61 @@
     "share_with_friends": "Share with Friends",
     "share_description": "Want your friends to enjoy ad-free music with unlimited streaming and offline downloads? Share OpenSpot and spread the vibe!",
     "share_app": "Share App",
-    "share_message": "Hey! Check out OpenSpot — ad-free music streaming with unlimited skips and offline downloads. Your personal music companion! 🎵"
+    "share_message": "Hey! Check out OpenSpot — ad-free music streaming with unlimited skips and offline downloads. Your personal music companion! 🎵",
+    "mix": "Mix",
+    "mix_description": "Configure Crossfade, AutoMix, DJ filters and harmonic matching.",
+    "extensions": "Extensions",
+    "extensions_description": "Manage providers, repository packages, priority and fallback."
+  },
+  "mix": {
+    "eyebrow": "PLAYBACK",
+    "title": "Mix",
+    "subtitle": "Blend the next track with a beat-aware transition.",
+    "mode": "Transition mode",
+    "off": "Off",
+    "crossfade": "Crossfade",
+    "transition_duration": "Transition duration",
+    "auto": "Auto",
+    "dj_mode": "DJ filter",
+    "dj_mode_hint": "Low-pass outgoing and high-pass incoming",
+    "bpm_matching": "BPM matching",
+    "bpm_matching_hint": "Normalize safe half-time/double-time ratios",
+    "harmonic_matching": "Harmonic matching",
+    "harmonic_matching_hint": "Use Camelot key distance and small pitch shifts",
+    "skip_same_album": "Skip same-album crossfade",
+    "skip_same_album_hint": "Keep album sequencing uninterrupted",
+    "show_meta": "Show BPM and key",
+    "show_meta_hint": "Expose transition metadata in Mix",
+    "now_playing": "Now mixing",
+    "current": "Current",
+    "next": "Next",
+    "metadata_pending": "BPM / key pending",
+    "ready": "Ready",
+    "waiting": "Waiting",
+    "no_track": "No track playing",
+    "run_checks": "Run AutoMix parity checks",
+    "checks_passed": "Parity checks passed",
+    "checks_failed": "Parity checks need attention"
+  },
+  "extensions": {
+    "title": "Extensions",
+    "installed": "Installed",
+    "store": "Extension Store",
+    "priority": "Provider Priority",
+    "fallback": "Provider Fallback",
+    "native_unavailable": "Extension Core is not available in this build yet.",
+    "empty_installed": "No extensions installed yet.",
+    "repository": "Extension repository",
+    "repository_hint": "Use a trusted HTTPS registry. Packages are verified by the core before installation.",
+    "all": "All",
+    "empty_store": "No repository extensions match this search.",
+    "configure_store": "Add a repository URL to browse extensions.",
+    "no_description": "No description provided.",
+    "update_available": "Update available",
+    "not_checked": "Not checked",
+    "check_health": "Check health",
+    "no_providers": "Install an extension provider to configure.",
+    "priority_hint": "The first eligible provider is tried first.",
+    "fallback_hint": "Allow these providers to receive the next attempt after a provider failure."
   }
 }
