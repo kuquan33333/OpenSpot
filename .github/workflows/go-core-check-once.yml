@@ -1,12 +1,17 @@
-name: Extension Core - Manual Check
+name: Extension Core - One Shot Check
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - '.github/workflows/go-core-check-once.yml'
 
 jobs:
   go-core-check:
     name: Extension Core - boundary gofmt vet test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: third_party/spotiflac-extension-core/upstream
