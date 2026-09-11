@@ -5,7 +5,8 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    # Use a fixed hosted image so a moving latest alias cannot block IPA builds.
+    runs-on: macos-15
     defaults:
       run:
         working-directory: openspot-mobile
