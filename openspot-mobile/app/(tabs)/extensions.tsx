@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import * as FileSystem from 'expo-file-system';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
@@ -68,6 +69,18 @@ export default function ExtensionsScreen() {
 
   const text = useCallback((key: string, fallbackText: string) => t(key, { defaultValue: fallbackText }), [t]);
 
+  const initializeCore = useCallback(async () => {
+    if (!extensionCoreBridge.isAvailable()) return;
+    const documentDirectory = FileSystem.documentDirectory;
+    if (!documentDirectory) throw new Error('Extension storage directory is unavailable');
+    const cacheDirectory = FileSystem.cacheDirectory ?? documentDirectory;
+    await extensionCoreBridge.initialize(
+      `${documentDirectory}extensions`,
+      `${documentDirectory}extension-data`,
+    );
+    await extensionCoreBridge.initRepository(`${cacheDirectory}extension-repository`);
+  }, []);
+
   const loadInstalled = useCallback(async () => {
     if (!extensionCoreBridge.isAvailable()) {
       setError(text('extensions.native_unavailable', 'Extension Core is not available in this build yet.'));
@@ -104,6 +117,7 @@ export default function ExtensionsScreen() {
     setBusy(true);
     setError(null);
     try {
+      await initializeCore();
       await loadInstalled();
       await loadRepositoryConfig();
     } catch (cause) {
@@ -111,7 +125,7 @@ export default function ExtensionsScreen() {
     } finally {
       setBusy(false);
     }
-  }, [loadInstalled, loadRepositoryConfig]);
+  }, [initializeCore, loadInstalled, loadRepositoryConfig]);
 
   useEffect(() => {
     void refresh();

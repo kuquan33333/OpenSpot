@@ -11,7 +11,7 @@ import type {
 } from './extension-types';
 
 type NativeCall = (...args: unknown[]) => unknown;
-type NativeModuleShape = Record<string, NativeCall | undefined>;
+type NativeModuleShape = Record<string, NativeCall | undefined> & { call?: NativeCall };
 
 export class ExtensionCoreUnavailableError extends Error {
   constructor(message = 'Extension Core native module is not installed') {
@@ -22,7 +22,17 @@ export class ExtensionCoreUnavailableError extends Error {
 
 function resolveNativeModule(): NativeModuleShape | null {
   const modules = NativeModules as unknown as Record<string, NativeModuleShape | undefined>;
-  return modules.OpenSpotExtensionCore ?? modules.Gobackend ?? null;
+  const linkedModule = modules.OpenSpotExtensionCore ?? modules.Gobackend;
+  if (linkedModule) return linkedModule;
+
+  // Expo Modules are exposed through requireNativeModule on newer runtimes;
+  // keep the NativeModules path above for classic and existing builds.
+  try {
+    const modulesCore = require('expo-modules-core') as { requireNativeModule?: (name: string) => NativeModuleShape };
+    return modulesCore.requireNativeModule?.('OpenSpotExtensionCore') ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function methodName(name: string): string {
@@ -41,6 +51,11 @@ function decodeJSON<T>(value: unknown): T {
 }
 
 async function callNative<T>(name: string, ...args: unknown[]): Promise<T> {
+  const module = resolveNativeModule();
+  const genericCall = module?.call;
+  if (genericCall) {
+    return decodeJSON<T>(await Reflect.apply(genericCall, module, [name, JSON.stringify(args)]));
+  }
   const method = resolveMethod(name);
   if (!method) throw new ExtensionCoreUnavailableError();
   return decodeJSON<T>(await method(...args));
