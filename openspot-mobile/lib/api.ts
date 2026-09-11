@@ -2,7 +2,13 @@ import axios, { isAxiosError } from 'axios';
 import CryptoJS from 'crypto-js';
 import { SearchResponse, SearchParams, Track, Album, Artist, PlaylistSearchItem } from '../types/music';
 
-const JIO_SAAVN_API_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+const getJioSaavnApiUrl = (): string => {
+  const value = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  if (!value) {
+    throw new Error('EXPO_PUBLIC_API_BASE_URL is not configured');
+  }
+  return value;
+};
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -14,7 +20,7 @@ const USER_AGENTS = [
 const getRandomUserAgent = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
 const buildApiUrl = (endpoint: string, params: Record<string, string | number> = {}) => {
-  const url = new URL(JIO_SAAVN_API_URL);
+  const url = new URL(getJioSaavnApiUrl());
   url.searchParams.append('__call', endpoint);
   url.searchParams.append('_format', 'json');
   url.searchParams.append('_marker', '0');

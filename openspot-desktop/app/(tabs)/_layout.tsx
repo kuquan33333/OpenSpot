@@ -222,7 +222,7 @@ export default function TabLayout() {
 
   useEffect(() => {
     try {
-      getCurrentWindow().setTheme(isDark ? 'Dark' : 'Light');
+      getCurrentWindow().setTheme(isDark ? 'dark' : 'light');
     } catch {}
   }, [isDark]);
 

@@ -336,13 +336,14 @@ export function FullScreenPlayer({
   }, [onQueueToggle]);
 
   const handleArtistPress = useCallback(() => {
+    if (!track) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
     router.push({
       pathname: '/search',
       params: { q: track.artist, type: 'artist' }
     });
-  }, [router, track?.artist, onClose]);
+  }, [router, track, onClose]);
 
   const handleSliderStart = useCallback(() => {
     setIsSeeking(true);
