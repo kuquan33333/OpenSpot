@@ -2,6 +2,11 @@ name: Check All - Manual
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - .github/workflows/check-all-once.yml
 
 concurrency:
   group: openspot-check-all-${{ github.ref }}
