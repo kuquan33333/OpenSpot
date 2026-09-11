@@ -1,0 +1,38 @@
+name: Extension Core - One Shot Format
+
+on:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - '.github/workflows/go-format-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/openspot-vnext-extension-automix
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: false
+      - name: Format imported Go files
+        run: |
+          gofmt -w third_party/spotiflac-extension-core/upstream/extension_signed_session.go
+          gofmt -w third_party/spotiflac-extension-core/upstream/filename.go
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            echo 'No formatting changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add third_party/spotiflac-extension-core/upstream/extension_signed_session.go third_party/spotiflac-extension-core/upstream/filename.go
+          git commit -m 'style: gofmt imported extension core files'
+          git push origin HEAD:feature/openspot-vnext-extension-automix
