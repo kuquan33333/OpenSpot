@@ -322,6 +322,12 @@ func CallOpenSpotExtensionJSON(operation, payloadJSON string) (string, error) {
 	}
 
 	switch operation {
+	case "SetExtensionStorageMasterKey":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(SetExtensionStorageMasterKey(value))
 	case "InitExtensionSystem":
 		extensionsDir, callErr := stringArg(0)
 		if callErr != nil {
