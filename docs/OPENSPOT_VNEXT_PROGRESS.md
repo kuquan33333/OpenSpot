@@ -48,6 +48,7 @@ Ported engine/runtime coverage includes:
 - signed-session support
 - provider contracts/wrappers and metadata-provider aggregation
 - OpenSpot Core-scoped download-provider ordering/fallback coordinator with availability, verification and cancellation handling
+- OpenSpot host bridge parity for auth challenges/tokens, FFmpeg command pumping, URL handling and post-processing V2
 - metadata/search matching and cross-extension collection sharing
 - download-quality contract used by extension providers
 - resolution budget, timeout and performance helpers
