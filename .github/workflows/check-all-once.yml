@@ -1,0 +1,93 @@
+name: Check All - One Shot
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - .github/workflows/check-all-once.yml
+
+concurrency:
+  group: openspot-check-all-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mobile-check:
+    name: Mobile - lint and typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: openspot-mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: openspot-mobile/package-lock.json
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: ESLint
+        run: npm run lint
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+  desktop-check:
+    name: Desktop UI - lint and typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: openspot-desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: openspot-desktop/package-lock.json
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: ESLint
+        run: npm run lint
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+  extension-go-check:
+    name: Extension Core - Go test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: third_party/spotiflac-extension-core/upstream
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache-dependency-path: third_party/spotiflac-extension-core/upstream/go.sum
+      - name: Download Go modules
+        run: go mod download
+      - name: Go format check
+        run: |
+          test -z "$(gofmt -l .)" || { echo 'Go files need gofmt:'; gofmt -l .; exit 1; }
+      - name: Go vet
+        run: go vet ./...
+      - name: Go test
+        run: go test ./...
+
+  tauri-rust-check:
+    name: Desktop Tauri - cargo check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cargo check
+        run: cargo check --manifest-path openspot-desktop/src-tauri/Cargo.toml
