@@ -259,6 +259,21 @@ func GetExtensionFallbackProviderIDsJSON() (string, error) {
 	return marshalExtensionJSON(GetExtensionFallbackProviderIDs())
 }
 
+// DownloadExtensionWithFallbackJSON exposes the provider-only fallback
+// coordinator to native hosts. Progress callbacks belong to the native
+// binding; the JSON entry point returns the complete attempt trace instead.
+func DownloadExtensionWithFallbackJSON(requestJSON string) (string, error) {
+	var request DownloadRequest
+	if err := json.Unmarshal([]byte(requestJSON), &request); err != nil {
+		return "", fmt.Errorf("invalid extension download request: %w", err)
+	}
+	result, err := DownloadExtensionProviderFallback(request, nil)
+	if err != nil {
+		return "", err
+	}
+	return marshalExtensionJSON(result)
+}
+
 func SetMetadataProviderPriorityJSON(priorityJSON string) error {
 	var priority []string
 	if err := json.Unmarshal([]byte(priorityJSON), &priority); err != nil {
