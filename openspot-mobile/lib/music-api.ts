@@ -1,9 +1,7 @@
 import { SearchResponse, SearchParams, Track } from '../types/music';
 import { MusicApi } from './api';
-import { YTMusicAPI } from './ytmusic-api';
+import { ProviderRegistry, type ProviderId } from './providers/provider-registry';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const PROVIDER_KEY = 'openspot_provider_v1';
 
 export class MusicAPI {
   private static searchCache = new Map<string, Promise<SearchResponse>>();
@@ -11,61 +9,81 @@ export class MusicAPI {
   private static recentlyPlayedStorageKey = 'openspot_recently_played_tracks_v1';
   private static recentlyPlayedLimit = 30;
 
-  private static async getProvider(): Promise<'saavn' | 'ytmusic'> {
-    try {
-      const provider = await AsyncStorage.getItem(PROVIDER_KEY);
-      return (provider === 'ytmusic' ? 'ytmusic' : 'saavn') as 'saavn' | 'ytmusic';
-    } catch {
-      return 'saavn';
-    }
-  }
-
-  private static resolveProviderHint(trackOrProvider?: Track | 'saavn' | 'ytmusic'): 'saavn' | 'ytmusic' | null {
+  private static resolveProviderHint(trackOrProvider?: Track | ProviderId): ProviderId | null {
     if (!trackOrProvider) return null;
-    if (trackOrProvider === 'saavn' || trackOrProvider === 'ytmusic') {
-      return trackOrProvider;
-    }
+    if (typeof trackOrProvider === 'string') return trackOrProvider;
     return trackOrProvider.provider || null;
   }
 
   static async search(params: SearchParams): Promise<SearchResponse> {
-    const provider = await this.getProvider();
-    
-    if (provider === 'ytmusic' && (!params.type || params.type === 'track')) {
-      return YTMusicAPI.search({ q: params.q, type: params.type });
-    }
-    return MusicApi.search(params);
+    return ProviderRegistry.search(params);
   }
 
   static async searchTracks(query: string, page: number = 1, limit: number = 20): Promise<SearchResponse> {
-    const provider = await this.getProvider();
-    if (provider === 'ytmusic') {
-      return YTMusicAPI.search({ q: query, type: 'track' });
-    }
-    return MusicApi.searchTracks(query, page, limit);
+    return ProviderRegistry.searchTracks(query, page, limit);
   }
 
-  static async getStreamUrl(trackId: string, trackOrProvider?: Track | 'saavn' | 'ytmusic'): Promise<string> {
-    const hintedProvider = this.resolveProviderHint(trackOrProvider);
-    const provider = hintedProvider || 'saavn';
-    if (provider === 'ytmusic') {
-      return YTMusicAPI.getStreamUrl(trackId);
+  static async getStreamUrl(trackId: string, trackOrProvider?: Track | ProviderId): Promise<string> {
+    if (trackOrProvider && typeof trackOrProvider !== 'string') {
+      const result = await ProviderRegistry.resolveStream(trackOrProvider);
+      return result.url;
     }
-    return MusicApi.getStreamUrl(trackId);
+
+    const providerHint = this.resolveProviderHint(trackOrProvider);
+    if (providerHint) {
+      const provider = ProviderRegistry.get(providerHint);
+      if (provider?.capabilities.has('stream')) {
+        return provider.getStreamUrl(trackId);
+      }
+    }
+
+    const priority = await ProviderRegistry.getPriority();
+    let lastError: unknown = null;
+    for (const providerId of priority) {
+      const provider = ProviderRegistry.get(providerId);
+      if (!provider?.capabilities.has('stream')) continue;
+      try {
+        return await provider.getStreamUrl(trackId);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('No stream provider is currently available');
   }
 
-  static async getDownloadUrl(trackId: string, trackOrProvider?: Track | 'saavn' | 'ytmusic'): Promise<string> {
-    const hintedProvider = this.resolveProviderHint(trackOrProvider);
-    const provider = hintedProvider || 'saavn';
-    if (provider === 'ytmusic') {
-      return YTMusicAPI.getDownloadUrl(trackId);
+  static async getDownloadUrl(trackId: string, trackOrProvider?: Track | ProviderId): Promise<string> {
+    if (trackOrProvider && typeof trackOrProvider !== 'string') {
+      const result = await ProviderRegistry.resolveDownload(trackOrProvider);
+      return result.url;
     }
-    
-    return MusicApi.getStreamUrl(trackId);
+
+    const providerHint = this.resolveProviderHint(trackOrProvider);
+    if (providerHint) {
+      const provider = ProviderRegistry.get(providerHint);
+      if (provider?.capabilities.has('download')) {
+        const resolver = provider.getDownloadUrl || provider.getStreamUrl;
+        return resolver(trackId);
+      }
+    }
+
+    const priority = await ProviderRegistry.getPriority();
+    let lastError: unknown = null;
+    for (const providerId of priority) {
+      const provider = ProviderRegistry.get(providerId);
+      if (!provider?.capabilities.has('download')) continue;
+      try {
+        const resolver = provider.getDownloadUrl || provider.getStreamUrl;
+        return await resolver(trackId);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('No download provider is currently available');
   }
 
   static async getPopularTracks(): Promise<Track[]> {
-    
     return MusicApi.getPopularTracks();
   }
 
@@ -117,29 +135,16 @@ export class MusicAPI {
   }
 
   static async getMadeForYou(): Promise<Track[]> {
-    
     return MusicApi.getMadeForYou();
   }
 
-  static async resolveTrackById(trackId: string, preferredProvider?: 'saavn' | 'ytmusic'): Promise<Track | null> {
-    const providers: ('saavn' | 'ytmusic')[] = preferredProvider
-      ? [preferredProvider, preferredProvider === 'saavn' ? 'ytmusic' : 'saavn']
-      : ['saavn', 'ytmusic'];
-
-    for (const provider of providers) {
-      try {
-        const response = provider === 'saavn'
-          ? await MusicApi.search({ q: trackId, type: 'track' })
-          : await YTMusicAPI.search({ q: trackId, type: 'track' });
-        if (response.tracks.length > 0) {
-          return response.tracks[0];
-        }
-      } catch {
-        
-      }
+  static async resolveTrackById(trackId: string, preferredProvider?: ProviderId): Promise<Track | null> {
+    try {
+      const response = await ProviderRegistry.searchTracks(trackId, 1, 20, preferredProvider || null);
+      return response.tracks[0] || null;
+    } catch {
+      return null;
     }
-
-    return null;
   }
 
   static formatDuration(duration: number): string {
@@ -180,4 +185,4 @@ export class MusicAPI {
   static clearStreamCache(): void {
     this.streamCache.clear();
   }
-} 
+}
