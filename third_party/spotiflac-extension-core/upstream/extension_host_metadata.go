@@ -208,7 +208,7 @@ type musicBrainzArtistCredit struct {
 }
 
 type musicBrainzRelease struct {
-	Title        string                     `json:"title"`
+	Title        string                    `json:"title"`
 	ArtistCredit []musicBrainzArtistCredit `json:"artist-credit"`
 }
 
