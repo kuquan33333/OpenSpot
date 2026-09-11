@@ -92,7 +92,6 @@ func getExtensionProviderMetadataResponse(providerID, resourceType, resourceID s
 		return nil, fmt.Errorf("extension '%s' is disabled", providerID)
 	}
 	provider := newExtensionProviderWrapper(ext)
-
 	switch strings.ToLower(strings.TrimSpace(resourceType)) {
 	case "track":
 		track, err := provider.GetTrack(resourceID)
@@ -152,7 +151,7 @@ func getExtensionProviderMetadataResponse(providerID, resourceType, resourceID s
 		response := map[string]any{
 			"artist_info": map[string]any{
 				"id": artist.ID, "name": artist.Name,
-				"images": firstNonEmptyTrimmed(artist.HeaderImage, artist.ImageURL),
+				"images":    firstNonEmptyTrimmed(artist.HeaderImage, artist.ImageURL),
 				"cover_url": artist.ImageURL, "header_image": artist.HeaderImage,
 				"header_video": artist.HeaderVideo, "provider_id": artist.ProviderID,
 			},
@@ -206,37 +205,39 @@ func LoadExtensionFromPath(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return marshalExtensionJSON(map[string]any{
-		"id": ext.ID, "name": ext.Manifest.Name, "display_name": ext.Manifest.DisplayName,
-		"version": ext.Manifest.Version, "enabled": ext.Enabled,
-	})
+	return marshalExtensionJSON(map[string]any{"id": ext.ID, "name": ext.Manifest.Name, "display_name": ext.Manifest.DisplayName, "version": ext.Manifest.Version, "enabled": ext.Enabled})
 }
 
-func UnloadExtensionByID(extensionID string) error { return getExtensionManager().UnloadExtension(extensionID) }
-func RemoveExtensionByID(extensionID string) error { return getExtensionManager().RemoveExtension(extensionID) }
+func UnloadExtensionByID(extensionID string) error {
+	return getExtensionManager().UnloadExtension(extensionID)
+}
+func RemoveExtensionByID(extensionID string) error {
+	return getExtensionManager().RemoveExtension(extensionID)
+}
 
 func UpgradeExtensionFromPath(filePath string) (string, error) {
 	ext, err := getExtensionManager().UpgradeExtension(filePath)
 	if err != nil {
 		return "", err
 	}
-	return marshalExtensionJSON(map[string]any{
-		"id": ext.ID, "display_name": ext.Manifest.DisplayName,
-		"version": ext.Manifest.Version, "enabled": ext.Enabled,
-	})
+	return marshalExtensionJSON(map[string]any{"id": ext.ID, "display_name": ext.Manifest.DisplayName, "version": ext.Manifest.Version, "enabled": ext.Enabled})
 }
 
 func CheckExtensionUpgradeFromPath(filePath string) (string, error) {
 	return getExtensionManager().CheckExtensionUpgradeJSON(filePath)
 }
-func GetInstalledExtensions() (string, error) { return getExtensionManager().GetInstalledExtensionsJSON() }
+func GetInstalledExtensions() (string, error) {
+	return getExtensionManager().GetInstalledExtensionsJSON()
+}
 func SetExtensionEnabledByID(extensionID string, enabled bool) error {
 	return getExtensionManager().SetExtensionEnabled(extensionID, enabled)
 }
 
 func SetProviderPriorityJSON(priorityJSON string) error {
 	var priority []string
-	if err := json.Unmarshal([]byte(priorityJSON), &priority); err != nil { return err }
+	if err := json.Unmarshal([]byte(priorityJSON), &priority); err != nil {
+		return err
+	}
 	SetProviderPriority(priority)
 	return nil
 }
@@ -248,7 +249,9 @@ func SetExtensionFallbackProviderIDsJSON(providerIDsJSON string) error {
 		return nil
 	}
 	var providerIDs []string
-	if err := json.Unmarshal([]byte(providerIDsJSON), &providerIDs); err != nil { return err }
+	if err := json.Unmarshal([]byte(providerIDsJSON), &providerIDs); err != nil {
+		return err
+	}
 	SetExtensionFallbackProviderIDs(providerIDs)
 	return nil
 }
@@ -258,7 +261,9 @@ func GetExtensionFallbackProviderIDsJSON() (string, error) {
 
 func SetMetadataProviderPriorityJSON(priorityJSON string) error {
 	var priority []string
-	if err := json.Unmarshal([]byte(priorityJSON), &priority); err != nil { return err }
+	if err := json.Unmarshal([]byte(priorityJSON), &priority); err != nil {
+		return err
+	}
 	SetMetadataProviderPriority(priority)
 	return nil
 }
@@ -271,33 +276,47 @@ func GetExtensionSettingsJSON(extensionID string) (string, error) {
 }
 func SetExtensionSettingsJSON(extensionID, settingsJSON string) error {
 	var settings map[string]any
-	if err := json.Unmarshal([]byte(settingsJSON), &settings); err != nil { return err }
+	if err := json.Unmarshal([]byte(settingsJSON), &settings); err != nil {
+		return err
+	}
 	store := GetExtensionSettingsStore()
-	if err := store.SetAll(extensionID, settings); err != nil { return err }
+	if err := store.SetAll(extensionID, settings); err != nil {
+		return err
+	}
 	return getExtensionManager().InitializeExtension(extensionID, settings)
 }
 
 func SearchTracksWithMetadataProvidersJSON(query string, limit int, includeExtensions bool) (string, error) {
 	tracks, err := getExtensionManager().SearchTracksWithMetadataProviders(query, limit, includeExtensions)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return marshalExtensionJSON(tracks)
 }
 func SearchTracksWithMetadataProviderJSON(providerID, query string, limit int) (string, error) {
 	tracks, err := getExtensionManager().SearchTracksWithMetadataProvider(providerID, query, limit)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return marshalExtensionJSON(tracks)
 }
 func GetProviderMetadataJSON(providerID, resourceType, resourceID string) (string, error) {
 	providerID = strings.TrimSpace(providerID)
-	if providerID == "" { return "", fmt.Errorf("empty provider ID") }
+	if providerID == "" {
+		return "", fmt.Errorf("empty provider ID")
+	}
 	response, err := getExtensionProviderMetadataResponse(providerID, resourceType, resourceID)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return marshalExtensionJSON(response)
 }
 
 func CleanupExtensions() { getExtensionManager().UnloadAllExtensions() }
 func InvokeExtensionActionJSON(extensionID, actionName string) (string, error) {
 	result, err := getExtensionManager().InvokeAction(extensionID, actionName)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return marshalExtensionJSON(result)
 }
