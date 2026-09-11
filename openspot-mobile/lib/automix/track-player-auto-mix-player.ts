@@ -11,5 +11,8 @@ export function createTrackPlayerAutoMixPlayer(): AutoMixAudioPlayer {
     async release() {},
     async setVolume(volume) { await TrackPlayer.setVolume(Math.min(1, Math.max(0, volume))); },
     async setRate(rate) { await TrackPlayer.setRate(rate); },
+    async getPositionMs() { return (await TrackPlayer.getProgress()).position * 1000; },
+    async getDurationMs() { return (await TrackPlayer.getProgress()).duration * 1000; },
+    async seekToMs(positionMs) { await TrackPlayer.seekTo(Math.max(0, positionMs) / 1000); },
   };
 }

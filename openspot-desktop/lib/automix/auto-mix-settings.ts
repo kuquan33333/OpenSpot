@@ -5,6 +5,9 @@ import type { AutoMixSettings } from './auto-mix-types';
 
 export const AUTO_MIX_SETTINGS_KEY = 'openspot_automix_settings_v1';
 
+type AutoMixSettingsListener = (settings: AutoMixSettings) => void;
+const listeners = new Set<AutoMixSettingsListener>();
+
 function isMode(value: unknown): value is AutoMixSettings['mode'] {
   return value === 'off' || value === 'crossfade' || value === 'automix';
 }
@@ -33,7 +36,14 @@ export async function loadAutoMixSettings(): Promise<AutoMixSettings> {
 }
 
 export async function saveAutoMixSettings(settings: AutoMixSettings): Promise<void> {
-  await AsyncStorage.setItem(AUTO_MIX_SETTINGS_KEY, JSON.stringify(normalize(settings)));
+  const next = normalize(settings);
+  await AsyncStorage.setItem(AUTO_MIX_SETTINGS_KEY, JSON.stringify(next));
+  listeners.forEach((listener) => listener(next));
+}
+
+export function subscribeAutoMixSettings(listener: AutoMixSettingsListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 export { normalize as normalizeAutoMixSettings };

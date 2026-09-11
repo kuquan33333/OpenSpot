@@ -65,6 +65,9 @@ export interface AutoMixAudioPlayer {
   release(): Promise<void>;
   setVolume(volume: number): Promise<void>;
   setRate(rate: number, shouldCorrectPitch?: boolean): Promise<void>;
+  getPositionMs?(): Promise<number>;
+  getDurationMs?(): Promise<number>;
+  seekToMs?(positionMs: number): Promise<void>;
   setPitch?(ratio: number): Promise<void>;
   setFilter?(kind: 'low-pass' | 'high-pass', cutoffHz: number): Promise<void>;
 }

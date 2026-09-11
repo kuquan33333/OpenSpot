@@ -35,5 +35,16 @@ export function createExpoAvAutoMixPlayer(): AutoMixAudioPlayer {
     async setRate(rate, shouldCorrectPitch = true) {
       await requireLoaded(sound).setRateAsync(Math.min(2, Math.max(0.5, rate)), shouldCorrectPitch);
     },
+    async getPositionMs() {
+      const status = await requireLoaded(sound).getStatusAsync();
+      return status.isLoaded ? status.positionMillis : 0;
+    },
+    async getDurationMs() {
+      const status = await requireLoaded(sound).getStatusAsync();
+      return status.isLoaded ? status.durationMillis ?? 0 : 0;
+    },
+    async seekToMs(positionMs) {
+      await requireLoaded(sound).setPositionAsync(Math.max(0, positionMs));
+    },
   };
 }

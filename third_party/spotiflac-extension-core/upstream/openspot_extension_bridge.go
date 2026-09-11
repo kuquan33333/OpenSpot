@@ -259,6 +259,338 @@ func GetExtensionFallbackProviderIDsJSON() (string, error) {
 	return marshalExtensionJSON(GetExtensionFallbackProviderIDs())
 }
 
+func extensionCallArgs(payloadJSON string) ([]json.RawMessage, error) {
+	if strings.TrimSpace(payloadJSON) == "" {
+		return nil, nil
+	}
+	var args []json.RawMessage
+	if err := json.Unmarshal([]byte(payloadJSON), &args); err != nil {
+		return nil, fmt.Errorf("invalid extension call arguments: %w", err)
+	}
+	return args, nil
+}
+
+func extensionCallString(args []json.RawMessage, index int) (string, error) {
+	if index < 0 || index >= len(args) {
+		return "", fmt.Errorf("missing extension call argument %d", index)
+	}
+	var value string
+	if err := json.Unmarshal(args[index], &value); err != nil {
+		return "", fmt.Errorf("invalid string extension call argument %d: %w", index, err)
+	}
+	return value, nil
+}
+
+func extensionCallInt(args []json.RawMessage, index int) (int, error) {
+	if index < 0 || index >= len(args) {
+		return 0, fmt.Errorf("missing extension call argument %d", index)
+	}
+	var value int
+	if err := json.Unmarshal(args[index], &value); err != nil {
+		return 0, fmt.Errorf("invalid integer extension call argument %d: %w", index, err)
+	}
+	return value, nil
+}
+
+func extensionCallBool(args []json.RawMessage, index int) (bool, error) {
+	if index < 0 || index >= len(args) {
+		return false, fmt.Errorf("missing extension call argument %d", index)
+	}
+	var value bool
+	if err := json.Unmarshal(args[index], &value); err != nil {
+		return false, fmt.Errorf("invalid boolean extension call argument %d: %w", index, err)
+	}
+	return value, nil
+}
+
+// CallOpenSpotExtensionJSON is the single JSON entry point used by native
+// hosts that cannot bind every Go export individually. Arguments are encoded
+// as a JSON array in the same order as the typed bridge functions. Returning
+// JSON from this boundary keeps the React Native and Tauri adapters identical
+// and avoids leaking application-level SpotiFLAC facades into the host.
+func CallOpenSpotExtensionJSON(operation, payloadJSON string) (string, error) {
+	args, err := extensionCallArgs(payloadJSON)
+	if err != nil {
+		return "", err
+	}
+	stringArg := func(index int) (string, error) { return extensionCallString(args, index) }
+	void := func(callErr error) (string, error) {
+		if callErr != nil {
+			return "", callErr
+		}
+		return "null", nil
+	}
+
+	switch operation {
+	case "InitExtensionSystem":
+		extensionsDir, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		dataDir, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(InitExtensionSystem(extensionsDir, dataDir))
+	case "LoadExtensionsFromDir":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return LoadExtensionsFromDir(value)
+	case "GetInstalledExtensions":
+		return GetInstalledExtensions()
+	case "SetExtensionEnabledByID":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		enabled, callErr := extensionCallBool(args, 1)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(SetExtensionEnabledByID(id, enabled))
+	case "GetExtensionSettingsJSON":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return GetExtensionSettingsJSON(id)
+	case "SetExtensionSettingsJSON":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		settings, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(SetExtensionSettingsJSON(id, settings))
+	case "GetProviderPriorityJSON":
+		return GetProviderPriorityJSON()
+	case "SetProviderPriorityJSON":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(SetProviderPriorityJSON(value))
+	case "GetMetadataProviderPriorityJSON":
+		return GetMetadataProviderPriorityJSON()
+	case "SetMetadataProviderPriorityJSON":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(SetMetadataProviderPriorityJSON(value))
+	case "SearchTracksWithMetadataProvidersJSON":
+		query, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		limit, callErr := extensionCallInt(args, 1)
+		if callErr != nil {
+			return "", callErr
+		}
+		includeExtensions, callErr := extensionCallBool(args, 2)
+		if callErr != nil {
+			return "", callErr
+		}
+		return SearchTracksWithMetadataProvidersJSON(query, limit, includeExtensions)
+	case "SearchTracksWithMetadataProviderJSON":
+		providerID, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		query, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		limit, callErr := extensionCallInt(args, 2)
+		if callErr != nil {
+			return "", callErr
+		}
+		return SearchTracksWithMetadataProviderJSON(providerID, query, limit)
+	case "GetProviderMetadataJSON":
+		providerID, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		resourceType, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		resourceID, callErr := stringArg(2)
+		if callErr != nil {
+			return "", callErr
+		}
+		return GetProviderMetadataJSON(providerID, resourceType, resourceID)
+	case "GetExtensionFallbackProviderIDsJSON":
+		return GetExtensionFallbackProviderIDsJSON()
+	case "SetExtensionFallbackProviderIDsJSON":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(SetExtensionFallbackProviderIDsJSON(value))
+	case "InitExtensionRepoJSON":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(InitExtensionRepoJSON(value))
+	case "SetRepoRegistryURLJSON":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(SetRepoRegistryURLJSON(value))
+	case "GetRepoRegistryURLJSON":
+		return GetRepoRegistryURLJSON()
+	case "GetRepoExtensionsJSON":
+		forceRefresh, callErr := extensionCallBool(args, 0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return GetRepoExtensionsJSON(forceRefresh)
+	case "SearchRepoExtensionsJSON":
+		query, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		category, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		return SearchRepoExtensionsJSON(query, category)
+	case "GetRepoCategoriesJSON":
+		return GetRepoCategoriesJSON()
+	case "DownloadRepoExtensionJSON":
+		extensionID, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		destination, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		return DownloadRepoExtensionJSON(extensionID, destination)
+	case "ClearRepoCacheJSON":
+		return void(ClearRepoCacheJSON())
+	case "CheckExtensionHealthJSON":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return CheckExtensionHealthJSON(id)
+	case "GetExtensionPendingAuthJSON":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return GetExtensionPendingAuthJSON(id)
+	case "SetExtensionAuthCodeByID":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		code, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		SetExtensionAuthCodeByID(id, code)
+		return "null", nil
+	case "SetExtensionSessionGrantByID":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		grant, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		SetExtensionSessionGrantByID(id, grant)
+		return "null", nil
+	case "ClearExtensionPendingAuthByID":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		ClearExtensionPendingAuthByID(id)
+		return "null", nil
+	case "GetPendingFFmpegCommandJSON":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return GetPendingFFmpegCommandJSON(id)
+	case "WaitForPendingFFmpegCommandsJSON":
+		timeoutMillis, callErr := extensionCallInt(args, 0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return WaitForPendingFFmpegCommandsJSON(int64(timeoutMillis))
+	case "SetFFmpegCommandResultByID":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		success, callErr := extensionCallBool(args, 1)
+		if callErr != nil {
+			return "", callErr
+		}
+		output, callErr := stringArg(2)
+		if callErr != nil {
+			return "", callErr
+		}
+		errorMsg, callErr := stringArg(3)
+		if callErr != nil {
+			return "", callErr
+		}
+		SetFFmpegCommandResultByID(id, success, output, errorMsg)
+		return "null", nil
+	case "HandleURLWithExtensionJSON":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return HandleURLWithExtensionJSON(value)
+	case "FindURLHandlerJSON":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return marshalExtensionJSON(FindURLHandlerJSON(value))
+	case "RunPostProcessingV2JSON":
+		inputJSON, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		metadataJSON, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		return RunPostProcessingV2JSON(inputJSON, metadataJSON)
+	case "DownloadExtensionWithFallbackJSON":
+		requestJSON, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return DownloadExtensionWithFallbackJSON(requestJSON)
+	case "InvokeExtensionActionJSON":
+		id, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		action, callErr := stringArg(1)
+		if callErr != nil {
+			return "", callErr
+		}
+		return InvokeExtensionActionJSON(id, action)
+	default:
+		return "", fmt.Errorf("unknown extension operation: %s", operation)
+	}
+}
+
 // DownloadExtensionWithFallbackJSON exposes the provider-only fallback
 // coordinator to native hosts. Progress callbacks belong to the native
 // binding; the JSON entry point returns the complete attempt trace instead.
