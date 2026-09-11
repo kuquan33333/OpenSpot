@@ -28,9 +28,9 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 - [x] P10 Search bottom tab replaced with Mix
 - [~] P11-P19 SimpMusic AutoMix engine parity — planner, equal-power transition, filter/ramp contracts, settings and edge guards added; live Player/DSP integration pending
 - [~] P20-P21 Mix UI/settings — mobile/desktop controls and persistence added; live playback binding pending
-- [~] P22 Vietnamese mobile + desktop — locale registration and primary-screen translation in progress
-- [ ] P23-P27 settings/search/cache/diagnostics integration
-- [~] P28-P30 parity tests and cross-platform QA — deterministic parity checks and Rust/static checks added; CI and runtime QA pending
+- [~] P22 Vietnamese mobile + desktop — locale registration and primary-screen translation added; remaining legacy update/footer copy is still being migrated
+- [~] P23-P27 settings/search/cache/diagnostics integration — cache clearing, AutoMix metadata TTL cache and structured provider/playback/AutoMix diagnostics are integrated; remaining settings/search/runtime wiring pending
+- [~] P28-P30 parity tests and cross-platform QA — deterministic parity checks, Rust/static checks and Check All CI are green; runtime device/audio-focus/long-queue QA remains pending
 
 ## SpotiFLAC Extension Core
 
@@ -86,11 +86,11 @@ Temporary diagnostic workflows used while locating the dependency leak were remo
 
 ## Current work block
 
-1. Run the manual Extension Core boundary/gofmt/vet/test check on the current branch.
-2. Finish Vietnamese primary-flow coverage and static parity checks.
-3. Wire the native Extension Core runtime and live AutoMix player/DSP adapters where the existing platform contracts allow it.
-4. Run the manual cross-platform check workflow, fix every actionable failure, and repeat until green.
-5. Dispatch the manual unsigned iOS IPA workflow and verify the uploaded artifact.
+1. [x] Run the manual Extension Core boundary/gofmt/vet/test check on the current branch.
+2. [~] Finish Vietnamese primary-flow coverage and static parity checks.
+3. [~] Wire the native Extension Core runtime and live AutoMix player/DSP adapters where the existing platform contracts allow it.
+4. [x] Run the manual cross-platform check workflow, fix every actionable failure, and repeat until green.
+5. [~] Dispatch the manual unsigned iOS IPA workflow and verify the uploaded artifact on the final commit.
 
 ## Rules
 
