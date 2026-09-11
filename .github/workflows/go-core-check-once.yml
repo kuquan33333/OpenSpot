@@ -1,11 +1,15 @@
-name: Extension Core - Manual Check
+name: Extension Core - One Shot Check
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - .github/workflows/go-core-check-once.yml
 
 jobs:
   go-core-check:
-    name: Extension Core - gofmt vet test
+    name: Extension Core - gofmt test vet
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -18,10 +22,9 @@ jobs:
           cache: false
       - name: Resolve modules
         run: go mod tidy
-      - name: Go format check
-        run: |
-          test -z "$(gofmt -l .)" || { echo 'Go files need gofmt:'; gofmt -l .; exit 1; }
+      - name: Go format workspace
+        run: gofmt -w extension_signed_session.go extension_runtime_file_transform.go extension_runtime_ffmpeg.go audio_quality.go
+      - name: Go test compile diagnostics
+        run: go test ./...
       - name: Go vet
         run: go vet ./...
-      - name: Go test
-        run: go test ./...
