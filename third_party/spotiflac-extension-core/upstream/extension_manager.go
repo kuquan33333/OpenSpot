@@ -116,7 +116,7 @@ type extensionManager struct {
 	// teardown/reload), which are not safe to run concurrently. Acquired before
 	// m.mu; "*Locked" helpers assume it is held.
 	mutationMu    sync.Mutex
-	extensions      map[string]*loadedExtension
+	extensions    map[string]*loadedExtension
 	extensionsDir string
 	dataDir       string
 }
