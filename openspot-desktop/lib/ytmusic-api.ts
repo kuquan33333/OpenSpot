@@ -20,7 +20,7 @@ type YtApiVideoData = {
 };
 
 const getEnvInstances = (): string[] => {
-  const raw = process.env.EXPO_PUBLIC_YT_API_INSTANCES || '';
+  const raw = String(process.env.EXPO_PUBLIC_YT_API_INSTANCES || '');
   return raw.split(',').map(s => s.trim()).filter(Boolean);
 };
 
