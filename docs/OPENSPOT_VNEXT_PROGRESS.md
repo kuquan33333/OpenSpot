@@ -21,7 +21,7 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 - [~] P3 SpotiFLAC Extension Core direct port — active, core boundary corrected
 - [~] P4 `.sflx` compatibility — package validation/extraction ported, host integration pending
 - [~] P5 manifest/permission parity — manifest/permission/runtime HTTP/file sandbox foundations ported, host integration pending
-- [ ] P6 extension repository/store
+- [~] P6 extension repository/store — core registry/cache/download APIs ported, host/UI integration pending
 - [ ] P7 extension UI
 - [~] P8 provider priority/fallback — provider-neutral priority adaptation added; full app integration pending
 - [ ] P9 first-party providers migrated
@@ -49,6 +49,8 @@ Ported engine/runtime coverage includes:
 - provider contracts/wrappers and metadata-provider aggregation
 - OpenSpot Core-scoped download-provider ordering/fallback coordinator with availability, verification and cancellation handling
 - OpenSpot host bridge parity for auth challenges/tokens, FFmpeg command pumping, URL handling and post-processing V2
+- Extension repository registry/cache/search/category/download APIs with HTTPS and SHA-256 package verification
+- Extension health checks with service-key classification, TTL cache and asynchronous refresh support
 - metadata/search matching and cross-extension collection sharing
 - download-quality contract used by extension providers
 - resolution budget, timeout and performance helpers
@@ -86,7 +88,7 @@ Temporary diagnostic workflows used while locating the dependency leak were remo
 
 1. Run one manual Extension Core boundary/gofmt/vet/test check after the boundary refactor.
 2. Finish the remaining public bridge surface for auth, URL handlers, post-processing and FFmpeg requests without importing SpotiFLAC app-level services.
-3. Port repository/store and health APIs on top of the same isolated core.
+3. Port repository/store and health APIs on top of the same isolated core. Core layer is now present; host/UI exposure remains.
 4. Build Android/iOS Expo native bridge and Desktop/Tauri bridge against the same core API.
 5. Recreate the SpotiFLAC Extensions settings/store/detail UI in OpenSpot styling without changing feature behavior.
 6. Return to P1 playback integration and then continue the SimpMusic AutoMix port.
