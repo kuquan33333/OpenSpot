@@ -6,7 +6,7 @@ const LIKED_SONGS_STORAGE_KEY = 'openspot_liked_songs';
 
 interface LikedSong {
   id: string | number;
-  provider?: 'saavn' | 'ytmusic';
+  provider?: string;
   title: string;
   artist: string;
   albumTitle?: string;
