@@ -242,7 +242,7 @@ func (m *extensionManager) loadExtensionFromFileLocked(filePath string) (*loaded
 	ext := &loadedExtension{
 		ID:        manifest.Name,
 		Manifest:  manifest,
-		Enabled:   false,
+		Enabled:   false, // New extensions start disabled
 		DataDir:   extDataDir,
 		SourceDir: stagingDir,
 	}
@@ -283,6 +283,10 @@ var supportedRuntimeFeatures = map[string]int{
 	"preparedContext":        1,
 }
 
+// validateManifestGates enforces minAppVersion and requiredRuntimeFeatures
+// on every load path (.sflx install, upgrade, directory load); the Store UI
+// check alone never covered manual installs. An empty app version (tests,
+// dev harnesses) skips the version gate.
 func validateManifestGates(manifest *ExtensionManifest) error {
 	if manifest == nil {
 		return nil
@@ -349,6 +353,9 @@ func (m *extensionManager) UnloadExtension(extensionID string) error {
 	}
 
 	ext.Enabled = false
+	// Remove the extension from the manager before running user cleanup. New
+	// operations can no longer acquire it, while existing operations keep their
+	// per-extension VMMu lease and are allowed to finish before teardown.
 	delete(m.extensions, extensionID)
 	m.mu.Unlock()
 
@@ -432,6 +439,9 @@ func (m *extensionManager) SetExtensionEnabled(extensionID string, enabled bool)
 	return nil
 }
 
+// isManagedExtensionEnabled validates an operation lease after it has acquired
+// the per-extension VM lock. The manager lock is deliberately not held while
+// lifecycle/user JavaScript runs, so list/unload operations remain responsive.
 func (m *extensionManager) isManagedExtensionEnabled(extensionID string, ext *loadedExtension) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -527,7 +537,7 @@ func (m *extensionManager) loadExtensionFromDirectory(dirPath string) (*loadedEx
 	ext := &loadedExtension{
 		ID:        manifest.Name,
 		Manifest:  manifest,
-		Enabled:   false,
+		Enabled:   false, // Will be restored from settings store
 		DataDir:   extDataDir,
 		SourceDir: dirPath,
 	}
@@ -590,6 +600,8 @@ func (m *extensionManager) RemoveExtension(extensionID string) error {
 		GoLog("[Extension] Warning: failed to remove source dir: %v\n", err)
 	}
 
+	// Uninstall means gone: storage.json and encrypted credentials must not
+	// linger on disk after the extension is removed.
 	if err := os.RemoveAll(dataDir); err != nil {
 		GoLog("[Extension] Warning: failed to remove data dir: %v\n", err)
 	}
@@ -597,6 +609,7 @@ func (m *extensionManager) RemoveExtension(extensionID string) error {
 	return nil
 }
 
+// Only allows upgrades (new version > current version), not downgrades
 func (m *extensionManager) UpgradeExtension(filePath string) (*loadedExtension, error) {
 	m.mutationMu.Lock()
 	defer m.mutationMu.Unlock()
@@ -664,7 +677,7 @@ func (m *extensionManager) upgradeExtensionLocked(filePath string) (*loadedExten
 	ext := &loadedExtension{
 		ID:        newManifest.Name,
 		Manifest:  newManifest,
-		Enabled:   wasEnabled,
+		Enabled:   wasEnabled, // Preserve enabled state from before upgrade
 		DataDir:   extDataDir,
 		SourceDir: stagingDir,
 	}
@@ -733,6 +746,7 @@ func (m *extensionManager) checkExtensionUpgradeInternal(filePath string) (*Exte
 	}
 
 	zipReader, err := zip.OpenReader(filePath)
+
 	if err != nil {
 		return nil, fmt.Errorf("cannot open extension file")
 	}
@@ -976,6 +990,8 @@ func (m *extensionManager) InvokeAction(extensionID string, actionName string) (
 	vm := ext.VM
 	defer ext.VMMu.Unlock()
 
+	// Merge extension return values onto the top-level JSON object so Flutter can read
+	// message, open_auth_url, setting_updates without unwrapping a nested "result" key.
 	actionNameLiteral := strconv.Quote(actionName)
 	script := fmt.Sprintf(`
 			(function() {
