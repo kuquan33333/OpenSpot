@@ -116,7 +116,7 @@ type extensionManager struct {
 	// teardown/reload), which are not safe to run concurrently. Acquired before
 	// m.mu; "*Locked" helpers assume it is held.
 	mutationMu    sync.Mutex
-	extsions      map[string]*loadedExtension
+	extensions      map[string]*loadedExtension
 	extensionsDir string
 	dataDir       string
 }
@@ -129,7 +129,7 @@ var (
 func getExtensionManager() *extensionManager {
 	globalExtManagerOnce.Do(func() {
 		globalExtManager = &extensionManager{
-			extsions: make(map[string]*loadedExtension),
+			extensions: make(map[string]*loadedExtension),
 		}
 	})
 	return globalExtManager
@@ -175,7 +175,7 @@ func (m *extensionManager) loadExtensionFromFileLocked(filePath string) (*loaded
 	}
 
 	m.mu.RLock()
-	existing, exists := m.extsions[manifest.Name]
+	existing, exists := m.extensions[manifest.Name]
 	var existingVersion string
 	var existingDisplayName string
 	if exists {
@@ -196,14 +196,14 @@ func (m *extensionManager) loadExtensionFromFileLocked(filePath string) (*loaded
 	}
 
 	m.mu.Lock()
-	if _, exists := m.extsions[manifest.Name]; exists {
+	if _, exists := m.extensions[manifest.Name]; exists {
 		m.mu.Unlock()
 		return nil, fmt.Errorf("extension '%s' was installed by another process", manifest.DisplayName)
 	}
 
-	extsionsDir := m.extensionsDir
+	extensionsDir := m.extensionsDir
 	dataDir := m.dataDir
-	extDir, err := managedExtensionPath(extsionsDir, manifest.Name)
+	extDir, err := managedExtensionPath(extensionsDir, manifest.Name)
 	if err != nil {
 		m.mu.Unlock()
 		return nil, err
@@ -217,7 +217,7 @@ func (m *extensionManager) loadExtensionFromFileLocked(filePath string) (*loaded
 	}
 	m.mu.Unlock()
 
-	stagingDir, err := os.MkdirTemp(extsionsDir, "."+manifest.Name+"-install-*")
+	stagingDir, err := os.MkdirTemp(extensionsDir, "."+manifest.Name+"-install-*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create extension staging directory: %w", err)
 	}
@@ -259,13 +259,13 @@ func (m *extensionManager) loadExtensionFromFileLocked(filePath string) (*loaded
 	ext.SourceDir = extDir
 
 	m.mu.Lock()
-	if _, exists := m.extsions[manifest.Name]; exists {
+	if _, exists := m.extensions[manifest.Name]; exists {
 		m.mu.Unlock()
 		teardownExtension(ext)
 		_ = os.RemoveAll(extDir)
 		return nil, fmt.Errorf("extension '%s' was installed by another process", manifest.DisplayName)
 	}
-	m.extsions[manifest.Name] = ext
+	m.extensions[manifest.Name] = ext
 	m.mu.Unlock()
 	GoLog("[Extension] Loaded extension: %s v%s\n", manifest.DisplayName, manifest.Version)
 
@@ -342,14 +342,14 @@ func teardownExtension(ext *loadedExtension) {
 
 func (m *extensionManager) UnloadExtension(extensionID string) error {
 	m.mu.Lock()
-	ext, exists := m.extsions[extensionID]
+	ext, exists := m.extensions[extensionID]
 	if !exists {
 		m.mu.Unlock()
 		return fmt.Errorf("extension not found")
 	}
 
 	ext.Enabled = false
-	delete(m.extsions, extensionID)
+	delete(m.extensions, extensionID)
 	m.mu.Unlock()
 
 	ext.VMMu.Lock()
@@ -365,7 +365,7 @@ func (m *extensionManager) GetExtension(extensionID string) (*loadedExtension, e
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	ext, exists := m.extsions[extensionID]
+	ext, exists := m.extensions[extensionID]
 	if !exists {
 		return nil, fmt.Errorf("extension not found")
 	}
@@ -376,8 +376,8 @@ func (m *extensionManager) GetAllExtensions() []*loadedExtension {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	result := make([]*loadedExtension, 0, len(m.extsions))
-	for _, ext := range m.extsions {
+	result := make([]*loadedExtension, 0, len(m.extensions))
+	for _, ext := range m.extensions {
 		result = append(result, ext)
 	}
 	return result
@@ -385,7 +385,7 @@ func (m *extensionManager) GetAllExtensions() []*loadedExtension {
 
 func (m *extensionManager) SetExtensionEnabled(extensionID string, enabled bool) error {
 	m.mu.Lock()
-	ext, exists := m.extsions[extensionID]
+	ext, exists := m.extensions[extensionID]
 	if !exists {
 		m.mu.Unlock()
 		return fmt.Errorf("extension not found")
@@ -409,7 +409,7 @@ func (m *extensionManager) SetExtensionEnabled(extensionID string, enabled bool)
 		ext.VMMu.Unlock()
 		if err != nil {
 			m.mu.Lock()
-			if m.extsions[extensionID] == ext {
+			if m.extensions[extensionID] == ext {
 				ext.Enabled = false
 			}
 			m.mu.Unlock()
@@ -435,13 +435,13 @@ func (m *extensionManager) SetExtensionEnabled(extensionID string, enabled bool)
 func (m *extensionManager) isManagedExtensionEnabled(extensionID string, ext *loadedExtension) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.extsions[extensionID] == ext && ext.Enabled
+	return m.extensions[extensionID] == ext && ext.Enabled
 }
 
 func (m *extensionManager) isManagedExtension(extensionID string, ext *loadedExtension) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.extsions[extensionID] == ext
+	return m.extensions[extensionID] == ext
 }
 
 func (m *extensionManager) LoadExtensionsFromDirectory(dirPath string) ([]string, []error) {
@@ -507,7 +507,7 @@ func (m *extensionManager) loadExtensionFromDirectory(dirPath string) (*loadedEx
 		return nil, fmt.Errorf("extension is missing index.js file")
 	}
 
-	if existing, exists := m.extsions[manifest.Name]; exists {
+	if existing, exists := m.extensions[manifest.Name]; exists {
 		GoLog("[Extension] Extension '%s' already loaded, skipping\n", manifest.DisplayName)
 		return existing, nil
 	}
@@ -550,13 +550,13 @@ func (m *extensionManager) loadExtensionFromDirectory(dirPath string) (*loadedEx
 
 	m.mu.Lock()
 	locked = true
-	if _, exists := m.extsions[manifest.Name]; exists {
+	if _, exists := m.extensions[manifest.Name]; exists {
 		m.mu.Unlock()
 		locked = false
 		teardownExtension(ext)
 		return nil, fmt.Errorf("extension '%s' was installed by another process", manifest.DisplayName)
 	}
-	m.extsions[manifest.Name] = ext
+	m.extensions[manifest.Name] = ext
 	m.mu.Unlock()
 	locked = false
 	GoLog("[Extension] Loaded extension: %s v%s\n", manifest.DisplayName, manifest.Version)
@@ -620,7 +620,7 @@ func (m *extensionManager) upgradeExtensionLocked(filePath string) (*loadedExten
 	}
 
 	m.mu.RLock()
-	existing, exists := m.extsions[newManifest.Name]
+	existing, exists := m.extensions[newManifest.Name]
 	m.mu.RUnlock()
 
 	if !exists {
@@ -708,7 +708,7 @@ func (m *extensionManager) upgradeExtensionLocked(filePath string) (*loadedExten
 	}
 
 	m.mu.Lock()
-	m.extsions[newManifest.Name] = ext
+	m.extensions[newManifest.Name] = ext
 	m.mu.Unlock()
 	if err := os.RemoveAll(backupDir); err != nil {
 		GoLog("[Extension] Warning: failed to remove upgrade backup: %v\n", err)
@@ -744,7 +744,7 @@ func (m *extensionManager) checkExtensionUpgradeInternal(filePath string) (*Exte
 	}
 
 	m.mu.RLock()
-	existing, exists := m.extsions[newManifest.Name]
+	existing, exists := m.extensions[newManifest.Name]
 	m.mu.RUnlock()
 
 	info := &ExtensionUpgradeInfo{
@@ -892,7 +892,7 @@ func (m *extensionManager) GetInstalledExtensionsJSON() (string, error) {
 
 func (m *extensionManager) InitializeExtension(extensionID string, settings map[string]any) error {
 	m.mu.RLock()
-	ext, exists := m.extsions[extensionID]
+	ext, exists := m.extensions[extensionID]
 	m.mu.RUnlock()
 	if !exists {
 		return fmt.Errorf("extension not found")
@@ -912,7 +912,7 @@ func (m *extensionManager) InitializeExtension(extensionID string, settings map[
 
 func (m *extensionManager) CleanupExtension(extensionID string) error {
 	m.mu.RLock()
-	ext, exists := m.extsions[extensionID]
+	ext, exists := m.extensions[extensionID]
 	m.mu.RUnlock()
 	if !exists {
 		return fmt.Errorf("extension not found")
@@ -939,8 +939,8 @@ func (m *extensionManager) CleanupExtension(extensionID string) error {
 
 func (m *extensionManager) UnloadAllExtensions() {
 	m.mu.Lock()
-	extensionIDs := make([]string, 0, len(m.extsions))
-	for id := range m.extsions {
+	extensionIDs := make([]string, 0, len(m.extensions))
+	for id := range m.extensions {
 		extensionIDs = append(extensionIDs, id)
 	}
 	m.mu.Unlock()
@@ -954,7 +954,7 @@ func (m *extensionManager) UnloadAllExtensions() {
 
 func (m *extensionManager) InvokeAction(extensionID string, actionName string) (map[string]any, error) {
 	m.mu.RLock()
-	ext, exists := m.extsions[extensionID]
+	ext, exists := m.extensions[extensionID]
 	enabled := exists && ext.Enabled
 	m.mu.RUnlock()
 	if !exists {
