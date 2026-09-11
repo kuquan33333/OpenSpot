@@ -24,12 +24,12 @@ type ExtensionDownloadAttempt struct {
 // download-provider extensions in configured order. Result is the last
 // extension response when all attempts fail, or the successful response.
 type ExtensionFallbackResult struct {
-	Success       bool                       `json:"success"`
-	ProviderID    string                     `json:"provider_id,omitempty"`
-	FallbackUsed  bool                       `json:"fallback_used,omitempty"`
-	Stopped       bool                       `json:"stopped,omitempty"`
-	Result        *ExtDownloadResult         `json:"result,omitempty"`
-	Attempts      []ExtensionDownloadAttempt `json:"attempts"`
+	Success      bool                       `json:"success"`
+	ProviderID   string                     `json:"provider_id,omitempty"`
+	FallbackUsed bool                       `json:"fallback_used,omitempty"`
+	Stopped      bool                       `json:"stopped,omitempty"`
+	Result       *ExtDownloadResult         `json:"result,omitempty"`
+	Attempts     []ExtensionDownloadAttempt `json:"attempts"`
 }
 
 func (m *extensionManager) orderedExtensionDownloadProviders(providerHint string, allowFallback bool) []*extensionProviderWrapper {
@@ -231,8 +231,8 @@ func (m *extensionManager) DownloadWithExtensionProviderFallback(
 				req.DeezerID,
 				req.TidalID,
 				req.QobuzID,
-					req.DurationMS,
-					req.ItemID,
+				req.DurationMS,
+				req.ItemID,
 				extensionFallbackAvailabilityContext(req),
 			)
 			if errors.Is(err, ErrDownloadCancelled) || errors.Is(err, ErrExtensionRequestCancelled) {

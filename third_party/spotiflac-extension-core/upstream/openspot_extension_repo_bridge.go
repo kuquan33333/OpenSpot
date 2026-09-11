@@ -146,5 +146,3 @@ func ClearRepoCacheJSON() error {
 	repo.clearCache()
 	return nil
 }
-
-

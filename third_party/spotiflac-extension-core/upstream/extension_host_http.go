@@ -84,4 +84,3 @@ func isConnectivityFailure(err error) bool {
 	var errno syscall.Errno
 	return errors.As(err, &errno) && (errno == syscall.ECONNRESET || errno == syscall.ECONNREFUSED || errno == syscall.ETIMEDOUT)
 }
-
