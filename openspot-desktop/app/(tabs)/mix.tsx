@@ -8,20 +8,23 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { DEFAULT_AUTO_MIX_SETTINGS, planAutoMixTransition } from '@/lib/automix/auto-mix-algorithms';
 import { loadAutoMixSettings, saveAutoMixSettings } from '@/lib/automix/auto-mix-settings';
 import { runAutoMixParityChecks } from '@/lib/automix/auto-mix-parity-check';
+import { resolveAudioMeta } from '@/lib/automix/audio-meta-repository';
 import type { AutoMixSettings, AutoMixTrack } from '@/lib/automix/auto-mix-types';
 import type { Track } from '@/types/music';
 
 const DURATION_OPTIONS: Array<AutoMixSettings['durationMs']> = ['auto', 5_000, 10_000, 15_000, 20_000, 30_000, 45_000];
-function toAutoMixTrack(track: Track | null): AutoMixTrack | null { if (!track) return null; const candidate = track as Track & { audioMeta?: AutoMixTrack['audioMeta']; isVideo?: boolean }; return { id: String(track.id), durationMs: track.duration, albumId: track.albumId, isVideo: candidate.isVideo === true, audioMeta: candidate.audioMeta ?? null }; }
+function toAutoMixTrack(track: Track | null, audioMeta = track?.audioMeta): AutoMixTrack | null { if (!track) return null; return { id: String(track.id), durationMs: track.duration, albumId: track.albumId, isVideo: track.isVideo === true, audioMeta: audioMeta ?? null }; }
 
 export default function MixScreen() {
   const { t } = useTranslation(); const { currentTrack, musicQueue } = React.useContext(MusicPlayerContext); const isDark = useColorScheme() !== 'light';
-  const [settings, setSettings] = useState<AutoMixSettings>(DEFAULT_AUTO_MIX_SETTINGS); const [loaded, setLoaded] = useState(false); const [parityPassed, setParityPassed] = useState<boolean | null>(null);
+  const [settings, setSettings] = useState<AutoMixSettings>(DEFAULT_AUTO_MIX_SETTINGS); const [loaded, setLoaded] = useState(false); const [parityPassed, setParityPassed] = useState<boolean | null>(null); const [audioMetaByTrack, setAudioMetaByTrack] = useState<Record<string, AutoMixTrack['audioMeta']>>({});
   const theme = useMemo(() => ({ background: isDark ? '#050505' : '#f5efe6', surface: isDark ? '#121212' : '#fffaf2', elevated: isDark ? '#1b1b1b' : '#efe4d6', text: isDark ? '#fff' : '#2d2219', secondary: isDark ? '#a9a9a9' : '#7a6251', border: isDark ? '#2b2b2b' : '#e4d5c5', accent: isDark ? '#1DB954' : '#167c3a' }), [isDark]);
   const text = useCallback((key: string, fallback: string) => t(key, { defaultValue: fallback }), [t]);
   useEffect(() => { loadAutoMixSettings().then((value) => { setSettings(value); setLoaded(true); }).catch(() => setLoaded(true)); }, []);
   const update = useCallback((change: Partial<AutoMixSettings>) => { setSettings((previous) => { const next = { ...previous, ...change }; void saveAutoMixSettings(next); return next; }); }, []);
-  const current = toAutoMixTrack(currentTrack); const nextTrack = currentTrack && musicQueue.currentIndex >= 0 ? musicQueue.tracks[musicQueue.currentIndex + 1] ?? null : null; const next = toAutoMixTrack(nextTrack); const plan = current ? planAutoMixTransition(current, next, settings) : null;
+  const nextTrack = currentTrack && musicQueue.currentIndex >= 0 ? musicQueue.tracks[musicQueue.currentIndex + 1] ?? null : null;
+  useEffect(() => { let active = true; const tracks = [currentTrack, nextTrack].filter((track): track is Track => Boolean(track)); void Promise.all(tracks.map(async (track) => [String(track.id), await resolveAudioMeta(track)] as const)).then((entries) => { if (active) setAudioMetaByTrack(Object.fromEntries(entries)); }); return () => { active = false; }; }, [currentTrack, nextTrack]);
+  const current = toAutoMixTrack(currentTrack, currentTrack ? audioMetaByTrack[String(currentTrack.id)] : undefined); const next = toAutoMixTrack(nextTrack, nextTrack ? audioMetaByTrack[String(nextTrack.id)] : undefined); const plan = current ? planAutoMixTransition(current, next, settings) : null;
   const formatDuration = (duration: AutoMixSettings['durationMs']) => duration === 'auto' ? text('mix.auto', 'Auto') : `${Number(duration) / 1000}s`;
   const metaLabel = (track: AutoMixTrack | null) => !track?.audioMeta ? text('mix.metadata_pending', 'BPM / key pending') : `${track.audioMeta.bpm ? `${track.audioMeta.bpm} BPM` : 'BPM —'} · ${track.audioMeta.key ? `${track.audioMeta.key} ${track.audioMeta.keyScale ?? ''}`.trim() : 'Key —'}`;
   return <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}><View style={styles.titleRow}><View><Text style={[styles.eyebrow, { color: theme.accent }]}>{text('mix.eyebrow', 'PLAYBACK')}</Text><Text style={[styles.title, { color: theme.text }]}>{text('mix.title', 'Mix')}</Text></View><Ionicons name="shuffle" size={30} color={theme.accent} /></View><Text style={[styles.subtitle, { color: theme.secondary }]}>{text('mix.subtitle', 'Blend the next track with a beat-aware transition.')}</Text>

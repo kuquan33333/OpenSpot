@@ -5,6 +5,7 @@ import {
   planAutoMixTransition,
   quantize,
 } from './auto-mix-algorithms';
+import { recordDiagnostic } from '../diagnostics';
 import type {
   AutoMixAudioPlayer,
   AutoMixPlayerState,
@@ -17,12 +18,14 @@ import type {
 export const AUTOMIX_PREPARE_LEAD_MS = 3_000;
 export const AUTOMIX_STEP_COUNT = 50;
 
+type AutoMixDiagnostic = { type: string; trackId?: string; detail?: Record<string, unknown> };
+
 export interface AutoMixEngineOptions<T extends AutoMixTrack> {
   createPlayer: () => Promise<AutoMixAudioPlayer>;
   resolveUrl: (track: T, signal: AbortSignal) => Promise<string>;
   onStateChange?: (state: AutoMixPlayerState) => void;
   onTakeover?: (takeover: AutoMixTakeover<T>) => Promise<void> | void;
-  onDiagnostic?: (event: { type: string; trackId?: string; detail?: Record<string, unknown> }) => void;
+  onDiagnostic?: (event: AutoMixDiagnostic) => void;
 }
 
 interface ActivePlayer<T extends AutoMixTrack> {
@@ -118,12 +121,12 @@ export class AutoMixEngine<T extends AutoMixTrack> {
       }
       this.secondary = { track, player };
       this.setState('READY');
-      this.options.onDiagnostic?.({ type: 'precache_ready', trackId: track.id });
+      this.emitDiagnostic({ type: 'precache_ready', trackId: track.id });
       return true;
     } catch (error) {
       if (signal.aborted) return false;
       this.setState('ERROR');
-      this.options.onDiagnostic?.({ type: 'precache_failed', trackId: track.id, detail: { error: String(error) } });
+      this.emitDiagnostic({ type: 'precache_failed', trackId: track.id, detail: { error: String(error) } });
       return false;
     }
   }
@@ -142,10 +145,10 @@ export class AutoMixEngine<T extends AutoMixTrack> {
         return false;
       }
       this.precached.set(track.id, { track, player });
-      this.options.onDiagnostic?.({ type: 'precache_ready', trackId: track.id });
+      this.emitDiagnostic({ type: 'precache_ready', trackId: track.id });
       return true;
     } catch (error) {
-      this.options.onDiagnostic?.({ type: 'precache_failed', trackId: track.id, detail: { error: String(error) } });
+      this.emitDiagnostic({ type: 'precache_failed', trackId: track.id, detail: { error: String(error) } });
       return false;
     }
   }
@@ -196,7 +199,7 @@ export class AutoMixEngine<T extends AutoMixTrack> {
     const controller = new AbortController();
     this.transitionAbort = controller;
     this.setState('PLAYING');
-    this.options.onDiagnostic?.({
+    this.emitDiagnostic({
       type: 'automix_started', trackId: next.id,
       detail: { durationMs: plan.durationMs, beatCount: plan.beatCount, bpmRatio: plan.bpmRatio, pitchRatio: plan.pitchRatio },
     });
@@ -240,13 +243,13 @@ export class AutoMixEngine<T extends AutoMixTrack> {
       await outgoing.player.release().catch(() => {});
       this.current = incoming;
       this.secondary = null;
-      this.options.onDiagnostic?.({ type: 'automix_finished', trackId: next.id });
+      this.emitDiagnostic({ type: 'automix_finished', trackId: next.id });
       this.setState('PLAYING');
     } catch (error) {
       await outgoing.player.setVolume(1).catch(() => {});
       await incoming.player.setVolume(0).catch(() => {});
       if (controller.signal.aborted) {
-        this.options.onDiagnostic?.({ type: 'automix_cancelled', trackId: next.id });
+        this.emitDiagnostic({ type: 'automix_cancelled', trackId: next.id });
         if (this.takeoverOnCancel) {
           await this.promoteSecondary();
         } else {
@@ -256,7 +259,7 @@ export class AutoMixEngine<T extends AutoMixTrack> {
           this.setState('READY');
         }
       } else {
-        this.options.onDiagnostic?.({ type: 'automix_failed', trackId: next.id, detail: { error: String(error) } });
+        this.emitDiagnostic({ type: 'automix_failed', trackId: next.id, detail: { error: String(error) } });
         await incoming.player.release().catch(() => {});
         this.secondary = null;
         this.setState('ERROR');
@@ -287,6 +290,12 @@ export class AutoMixEngine<T extends AutoMixTrack> {
 
   private setState(state: AutoMixPlayerState): void {
     this.state = state;
+    recordDiagnostic({ category: 'automix', type: 'state_change', data: { state } });
     this.options.onStateChange?.(state);
+  }
+
+  private emitDiagnostic(event: AutoMixDiagnostic): void {
+    recordDiagnostic({ category: 'automix', type: event.type, data: { trackId: event.trackId, ...event.detail } });
+    this.options.onDiagnostic?.(event);
   }
 }

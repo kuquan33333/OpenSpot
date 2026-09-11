@@ -12,6 +12,14 @@ const numberValue = (record: LooseRecord, ...keys: string[]): number => {
   for (const key of keys) if (typeof record[key] === 'number' && Number.isFinite(record[key])) return record[key] as number;
   return 0;
 };
+const audioMetaFor = (record: LooseRecord): Track['audioMeta'] => {
+  const nested = record.audio_meta && typeof record.audio_meta === 'object' ? record.audio_meta as LooseRecord
+    : record.audioMeta && typeof record.audioMeta === 'object' ? record.audioMeta as LooseRecord : record;
+  const bpm = numberValue(nested, 'bpm', 'tempo') || numberValue(record, 'bpm', 'tempo');
+  const key = stringValue(nested, 'key', 'musical_key') || stringValue(record, 'key', 'musical_key');
+  const keyScale = stringValue(nested, 'keyScale', 'key_scale', 'mode') || stringValue(record, 'keyScale', 'key_scale', 'mode');
+  return bpm > 0 || key ? { bpm: bpm || null, key: key || null, keyScale: keyScale || null, source: 'provider' } : null;
+};
 const imagesFor = (record: LooseRecord): Track['images'] => {
   const raw = record.images ?? record.image ?? record.cover_url ?? record.coverUrl;
   const url = typeof raw === 'string' ? raw : '';
@@ -44,7 +52,7 @@ export function normalizeExtensionTrack(raw: unknown, providerId: string): Track
     version: null, label: stringValue(record, 'label'), labelId: 0, upc: stringValue(record, 'upc'), mediaCount: 1,
     parental_warning: Boolean(record.explicit), streamable: true, purchasable: false, previewable: false, genreId: 0,
     genreSlug: '', genreColor: '', releaseDateStream: stringValue(record, 'release_date'), releaseDateDownload: '', maximumChannelCount: 2,
-    images, isrc: stringValue(record, 'isrc'),
+    images, isrc: stringValue(record, 'isrc'), audioMeta: audioMetaFor(record), isVideo: record.isVideo === true || record.is_video === true,
   };
 }
 

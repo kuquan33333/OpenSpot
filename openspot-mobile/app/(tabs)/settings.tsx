@@ -23,6 +23,11 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemeMode, useThemeMode } from '@/hooks/theme-mode';
 import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
+import { MusicApi } from '@/lib/api';
+import { MusicAPI } from '@/lib/music-api';
+import { clearAudioMetaCache } from '@/lib/automix/audio-meta-repository';
+import { clearDiagnostics, getDiagnostics, subscribeDiagnostics } from '@/lib/diagnostics';
+import { clearPlaybackDiagnostics, getPlaybackDiagnostics } from '@/lib/playback/track-player-runtime';
 const CURRENT_VERSION = '3.1.5';
 const LINKEDIN_URL = 'https://www.linkedin.com/in/jash-gro/';
 const TELEGRAM_URL = 'https://telegram.dog/deveIoper_x';
@@ -78,6 +83,13 @@ export default function SettingsScreen() {
   const [pendingProvider, setPendingProvider] = useState<string | null>(null);
   const { isProviderDisabled } = useApiStatus();
   const { toastMessage, toastType, showToast } = useToast();
+  const [diagnosticCount, setDiagnosticCount] = useState(0);
+
+  useEffect(() => {
+    const refreshDiagnosticCount = () => setDiagnosticCount(getDiagnostics().length + getPlaybackDiagnostics().length);
+    refreshDiagnosticCount();
+    return subscribeDiagnostics(refreshDiagnosticCount);
+  }, []);
 
   const currentVersion = Constants.expoConfig?.version ?? CURRENT_VERSION;
 
@@ -119,9 +131,9 @@ export default function SettingsScreen() {
   );
 
   const modeOptions: { label: string; value: ThemeMode }[] = [
-    { label: 'Light', value: 'light' },
-    { label: 'Dark', value: 'dark' },
-    { label: 'Auto', value: 'auto' },
+    { label: t('components.theme_light'), value: 'light' },
+    { label: t('components.theme_dark'), value: 'dark' },
+    { label: t('components.theme_auto'), value: 'auto' },
   ];
 
   const languageOptions: { label: string; value: string; nativeLabel: string }[] = [
@@ -322,6 +334,21 @@ export default function SettingsScreen() {
     }
   };
 
+  const clearCachesAndDiagnostics = async () => {
+    MusicApi.clearCache();
+    MusicAPI.clearCache();
+    await clearAudioMetaCache().catch(() => {});
+    clearDiagnostics();
+    clearPlaybackDiagnostics();
+    setDiagnosticCount(0);
+    showToast(t('settings.cache_cleared'), 'success');
+  };
+
+  const shareDiagnostics = async () => {
+    const events = [...getDiagnostics(80), ...getPlaybackDiagnostics().slice(-80)].sort((a, b) => a.at - b.at).slice(-80);
+    await Share.share({ message: JSON.stringify(events, null, 2) }).catch(() => {});
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -405,6 +432,20 @@ export default function SettingsScreen() {
                 {t('common.open', { defaultValue: 'Open' })}
               </Text>
               <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>{t('settings.cache_diagnostics')}</Text>
+          <Text style={[styles.cardText, { color: theme.textSecondary }]}>{t('settings.cache_diagnostics_description')}</Text>
+          <Text style={[styles.cardText, { color: theme.textSecondary, marginTop: 8 }]}>{t('settings.diagnostics_count', { count: diagnosticCount })}</Text>
+          <View style={styles.versionButtonsRow}>
+            <TouchableOpacity style={[styles.secondaryButton, { borderColor: theme.border, flex: 1 }]} onPress={() => void clearCachesAndDiagnostics()}>
+              <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>{t('settings.clear_cache')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.primaryButton, { backgroundColor: theme.accent, flex: 1, marginLeft: 8 }]} onPress={() => void shareDiagnostics()}>
+              <Text style={styles.primaryButtonText}>{t('settings.share_diagnostics')}</Text>
             </TouchableOpacity>
           </View>
         </View>

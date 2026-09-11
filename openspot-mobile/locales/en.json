@@ -199,7 +199,13 @@
     "mix": "Mix",
     "mix_description": "Configure Crossfade, AutoMix, DJ filters and harmonic matching.",
     "extensions": "Extensions",
-    "extensions_description": "Manage providers, repository packages, priority and fallback."
+    "extensions_description": "Manage providers, repository packages, priority and fallback.",
+    "cache_diagnostics": "Cache & diagnostics",
+    "cache_diagnostics_description": "Clear search, stream, artwork metadata and AutoMix caches, or share recent runtime events.",
+    "diagnostics_count": "{{count}} diagnostic events recorded",
+    "clear_cache": "Clear cache",
+    "share_diagnostics": "Share diagnostics",
+    "cache_cleared": "Cache and diagnostics cleared"
   },
   "mix": {
     "eyebrow": "PLAYBACK",

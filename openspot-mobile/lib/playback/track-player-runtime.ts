@@ -1,4 +1,5 @@
 import TrackPlayer, { Capability } from 'react-native-track-player';
+import { recordDiagnostic } from '../diagnostics';
 
 export type PlaybackDiagnosticType =
   | 'PLAYER_SETUP_START'
@@ -21,10 +22,12 @@ let setupPromise: Promise<void> | null = null;
 let initialized = false;
 
 function pushDiagnostic(event: Omit<PlaybackDiagnosticEvent, 'at'>): void {
-  diagnostics.push({ ...event, at: Date.now() });
+  const at = Date.now();
+  diagnostics.push({ ...event, at });
   if (diagnostics.length > MAX_DIAGNOSTIC_EVENTS) {
     diagnostics.splice(0, diagnostics.length - MAX_DIAGNOSTIC_EVENTS);
   }
+  recordDiagnostic({ category: 'playback', type: event.type, message: event.message, data: event.data });
   if (__DEV__) console.debug('[PlaybackRuntime]', event.type, event.message || '', event.data || '');
 }
 

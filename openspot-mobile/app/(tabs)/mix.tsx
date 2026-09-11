@@ -9,15 +9,15 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { DEFAULT_AUTO_MIX_SETTINGS, planAutoMixTransition } from '@/lib/automix/auto-mix-algorithms';
 import { loadAutoMixSettings, saveAutoMixSettings } from '@/lib/automix/auto-mix-settings';
 import { runAutoMixParityChecks } from '@/lib/automix/auto-mix-parity-check';
+import { resolveAudioMeta } from '@/lib/automix/audio-meta-repository';
 import type { AutoMixSettings, AutoMixTrack } from '@/lib/automix/auto-mix-types';
 import type { Track } from '@/types/music';
 
 const DURATION_OPTIONS: Array<AutoMixSettings['durationMs']> = ['auto', 5_000, 10_000, 15_000, 20_000, 30_000, 45_000];
 
-function toAutoMixTrack(track: Track | null): AutoMixTrack | null {
+function toAutoMixTrack(track: Track | null, audioMeta = track?.audioMeta): AutoMixTrack | null {
   if (!track) return null;
-  const candidate = track as Track & { audioMeta?: AutoMixTrack['audioMeta']; isVideo?: boolean };
-  return { id: String(track.id), durationMs: track.duration, albumId: track.albumId, isVideo: candidate.isVideo === true, audioMeta: candidate.audioMeta ?? null };
+  return { id: String(track.id), durationMs: track.duration, albumId: track.albumId, isVideo: track.isVideo === true, audioMeta: audioMeta ?? null };
 }
 
 export default function MixScreen() {
@@ -27,6 +27,7 @@ export default function MixScreen() {
   const [settings, setSettings] = useState<AutoMixSettings>(DEFAULT_AUTO_MIX_SETTINGS);
   const [loaded, setLoaded] = useState(false);
   const [parityPassed, setParityPassed] = useState<boolean | null>(null);
+  const [audioMetaByTrack, setAudioMetaByTrack] = useState<Record<string, AutoMixTrack['audioMeta']>>({});
 
   const theme = useMemo(() => ({
     background: isDark ? '#050505' : '#f5efe6', surface: isDark ? '#121212' : '#fffaf2', elevated: isDark ? '#1b1b1b' : '#efe4d6',
@@ -39,8 +40,17 @@ export default function MixScreen() {
     setSettings((previous) => { const next = { ...previous, ...change }; void saveAutoMixSettings(next); return next; });
   }, []);
 
-  const current = toAutoMixTrack(currentTrack);
-  const next = currentTrack && musicQueue.currentIndex >= 0 ? toAutoMixTrack(musicQueue.tracks[musicQueue.currentIndex + 1] ?? null) : null;
+  const nextTrack = currentTrack && musicQueue.currentIndex >= 0 ? musicQueue.tracks[musicQueue.currentIndex + 1] ?? null : null;
+  useEffect(() => {
+    let active = true;
+    const tracks = [currentTrack, nextTrack].filter((track): track is Track => Boolean(track));
+    void Promise.all(tracks.map(async (track) => [String(track.id), await resolveAudioMeta(track)] as const)).then((entries) => {
+      if (active) setAudioMetaByTrack(Object.fromEntries(entries));
+    });
+    return () => { active = false; };
+  }, [currentTrack, nextTrack]);
+  const current = toAutoMixTrack(currentTrack, currentTrack ? audioMetaByTrack[String(currentTrack.id)] : undefined);
+  const next = toAutoMixTrack(nextTrack, nextTrack ? audioMetaByTrack[String(nextTrack.id)] : undefined);
   const plan = current ? planAutoMixTransition(current, next, settings) : null;
   const formatDuration = (duration: AutoMixSettings['durationMs']) => duration === 'auto' ? text('mix.auto', 'Auto') : `${Number(duration) / 1000}s`;
   const trackLabel = (track: Track | null) => track ? `${track.title} · ${track.artist}` : text('mix.no_track', 'No track playing');

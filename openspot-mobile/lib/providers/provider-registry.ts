@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { MusicApi } from '../api';
 import { YTMusicAPI } from '../ytmusic-api';
+import { recordDiagnostic } from '../diagnostics';
 import type { SearchParams, SearchResponse, Track } from '../../types/music';
 
 export type ProviderId = string;
@@ -131,6 +132,12 @@ class ProviderRegistryImpl {
 
   private emit(event: ProviderRegistryEvent): void {
     for (const listener of this.listeners) listener(event);
+    recordDiagnostic({
+      category: 'provider',
+      type: event.type,
+      message: event.type === 'resolve_failed' ? event.error : undefined,
+      data: { ...event },
+    });
     if (__DEV__) console.debug('[ProviderRegistry]', event);
   }
 

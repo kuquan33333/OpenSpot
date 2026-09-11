@@ -37,6 +37,13 @@ export interface Track {
     back: string | null;
   };
   isrc: string;
+  audioMeta?: {
+    bpm?: number | null;
+    key?: string | null;
+    keyScale?: string | null;
+    source?: 'provider' | 'cache' | 'local' | 'unknown';
+  } | null;
+  isVideo?: boolean;
 }
 
 export interface Album {
