@@ -1,7 +1,11 @@
 name: Fix Current Check Errors - One Shot
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - .github/workflows/fix-check-errors-once.yml
 
 permissions:
   contents: write
@@ -11,5 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: No-op safety guard
-        run: echo "One-shot patch completed; automatic execution is disabled."
+        with:
+          ref: feature/openspot-vnext-extension-automix
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: false
+      - name: Format vendored Go sources
+        run: |
+          gofmt -w \
+            third_party/spotiflac-extension-core/upstream/extension_manager.go \
+            third_party/spotiflac-extension-core/upstream/download_request.go
+      - name: Commit Go format fixes
+        run: |
+          git config user.name "todo996"
+          git config user.email "kuquan55555@gmail.com"
+          git add third_party/spotiflac-extension-core/upstream/extension_manager.go \
+                  third_party/spotiflac-extension-core/upstream/download_request.go
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: gofmt vendored SpotiFLAC core"
+          git push origin HEAD:feature/openspot-vnext-extension-automix
