@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const DownloadTimeout = 24 * time.Hour
+
 type RetryConfig struct {
 	MaxRetries    int
 	InitialDelay  time.Duration
