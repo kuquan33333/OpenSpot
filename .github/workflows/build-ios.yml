@@ -61,16 +61,17 @@ jobs:
 
       - name: Build Extension Core iOS framework
         run: |
+          cd "$GITHUB_WORKSPACE/third_party/spotiflac-extension-core/upstream"
           go install golang.org/x/mobile/cmd/gomobile
           export PATH="$(go env GOPATH)/bin:$PATH"
           gomobile init
-          mkdir -p modules/openspot-extension-core/ios/Frameworks
+          mkdir -p "$GITHUB_WORKSPACE/openspot-mobile/modules/openspot-extension-core/ios/Frameworks"
           gomobile bind \
             -target=ios \
             -tags ios \
-            -o modules/openspot-extension-core/ios/Frameworks/Gobackend.xcframework \
+            -o "$GITHUB_WORKSPACE/openspot-mobile/modules/openspot-extension-core/ios/Frameworks/Gobackend.xcframework" \
             "$GITHUB_WORKSPACE/third_party/spotiflac-extension-core/upstream"
-          test -d modules/openspot-extension-core/ios/Frameworks/Gobackend.xcframework
+          test -d "$GITHUB_WORKSPACE/openspot-mobile/modules/openspot-extension-core/ios/Frameworks/Gobackend.xcframework"
 
       - name: Create eas.json from secret
         run: printf '%s' '${{ secrets.EAS_JSON_CONTENT }}' > eas.json
