@@ -62,6 +62,7 @@ jobs:
       - name: Build Extension Core iOS framework
         run: |
           cd "$GITHUB_WORKSPACE/third_party/spotiflac-extension-core/upstream"
+          go mod tidy
           go install golang.org/x/mobile/cmd/gomobile
           export PATH="$(go env GOPATH)/bin:$PATH"
           gomobile init
