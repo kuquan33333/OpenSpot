@@ -1,13 +1,7 @@
-name: Extension Core - One Shot Check
+name: Extension Core - Manual Check
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/openspot-vnext-extension-automix
-    paths:
-      - 'third_party/spotiflac-extension-core/upstream/**'
-      - '.github/workflows/go-core-check-once.yml'
 
 jobs:
   go-core-check:
