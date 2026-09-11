@@ -65,7 +65,9 @@ jobs:
       - name: Install Pods
         run: |
           cd ios
-          export RCT_NEW_ARCH_ENABLED=1
+          # Keep the generated project aligned with app.json. Xcode 26.6's
+          # C++20 compile-time checks reject the fmt pod in the new-arch path.
+          export RCT_NEW_ARCH_ENABLED=0
           pod install --repo-update
 
       - name: Bundle JS (Hermes production)
