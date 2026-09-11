@@ -1,28 +1,40 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
+import { ensureTrackPlayerReady, runPlayerCommand } from './lib/playback/track-player-runtime';
 
 export default async function trackPlayerService() {
-  TrackPlayer.addEventListener(Event.RemotePlay, () => TrackPlayer.play());
-  TrackPlayer.addEventListener(Event.RemotePause, () => TrackPlayer.pause());
-  TrackPlayer.addEventListener(Event.RemoteStop, () => TrackPlayer.stop());
+  await ensureTrackPlayerReady().catch(() => {});
+
+  TrackPlayer.addEventListener(Event.RemotePlay, () => {
+    void runPlayerCommand('remote_play', () => TrackPlayer.play()).catch(() => {});
+  });
+  TrackPlayer.addEventListener(Event.RemotePause, () => {
+    void runPlayerCommand('remote_pause', () => TrackPlayer.pause()).catch(() => {});
+  });
+  TrackPlayer.addEventListener(Event.RemoteStop, () => {
+    void runPlayerCommand('remote_stop', () => TrackPlayer.stop()).catch(() => {});
+  });
 
   TrackPlayer.addEventListener(Event.RemoteNext, async () => {
     try {
-      await TrackPlayer.skipToNext();
-      await TrackPlayer.play();
+      await runPlayerCommand('remote_next', async () => {
+        await TrackPlayer.skipToNext();
+        await TrackPlayer.play();
+      });
     } catch {}
   });
 
   TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
     try {
-      await TrackPlayer.skipToPrevious();
-      await TrackPlayer.play();
+      await runPlayerCommand('remote_previous', async () => {
+        await TrackPlayer.skipToPrevious();
+        await TrackPlayer.play();
+      });
     } catch {}
   });
 
-  TrackPlayer.addEventListener(Event.RemoteSeek, async (e) => {
+  TrackPlayer.addEventListener(Event.RemoteSeek, async (event) => {
     try {
-      await TrackPlayer.seekTo((e as any).position);
+      await runPlayerCommand('remote_seek', () => TrackPlayer.seekTo((event as any).position));
     } catch {}
   });
 }
-
