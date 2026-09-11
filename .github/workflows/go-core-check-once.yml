@@ -1,11 +1,16 @@
-name: Extension Core - Manual Check
+name: Extension Core - One Shot Diagnostic
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/openspot-vnext-extension-automix
+    paths:
+      - '.github/workflows/go-core-check-once.yml'
 
 jobs:
   go-core-check:
-    name: Extension Core - gofmt vet test
+    name: Extension Core - diagnostic batch
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -21,7 +26,14 @@ jobs:
       - name: Go format check
         run: |
           test -z "$(gofmt -l .)" || { echo 'Go files need gofmt:'; gofmt -l .; exit 1; }
-      - name: Go vet
-        run: go vet ./...
-      - name: Go test
-        run: go test ./...
+      - name: Compile diagnostics
+        run: |
+          set +e
+          echo '=== go vet ==='
+          go vet ./...
+          vet_status=$?
+          echo '=== go test ==='
+          go test ./...
+          test_status=$?
+          echo "vet_status=$vet_status test_status=$test_status"
+          if [ "$vet_status" -ne 0 ] || [ "$test_status" -ne 0 ]; then exit 1; fi
