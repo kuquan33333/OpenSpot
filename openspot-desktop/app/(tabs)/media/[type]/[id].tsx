@@ -98,6 +98,8 @@ const TrackListItem = React.memo(({ item, index, isCurrentTrack, isPlaying, them
   );
 });
 
+TrackListItem.displayName = 'TrackListItem';
+
 export default function MediaDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{

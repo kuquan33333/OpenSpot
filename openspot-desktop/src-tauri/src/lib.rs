@@ -339,6 +339,15 @@ impl ExtensionCoreHost {
                     extension_data_dir.to_string_lossy(),
                 ]),
             )?;
+            // Restore packages installed in an earlier desktop session before
+            // the UI asks the core for its installed/provider state. Invalid
+            // packages are reported in the JSON result and must not prevent
+            // the repository from being initialized.
+            let _ = self.call_raw(
+                app,
+                "LoadExtensionsFromDir",
+                json!([extensions_dir.to_string_lossy()]),
+            );
             let cache_dir = app
                 .path()
                 .app_cache_dir()

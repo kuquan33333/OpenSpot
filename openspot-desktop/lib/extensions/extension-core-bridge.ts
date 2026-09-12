@@ -71,7 +71,7 @@ export const extensionCoreBridge = {
     callCore<Array<Record<string, unknown>>>('SearchTracksWithMetadataProviderJSON', [providerId, query, limit]),
   getProviderMetadata: (providerId: string, resourceType: string, resourceId: string) =>
     callCore<Record<string, unknown>>('GetProviderMetadataJSON', [providerId, resourceType, resourceId]),
-  getFallbackProviderIds: () => callCore<string[]>('GetExtensionFallbackProviderIDsJSON'),
+  getFallbackProviderIds: () => callCore<string[] | null>('GetExtensionFallbackProviderIDsJSON'),
   setFallbackProviderIds: (providerIds: string[]) => callCore<void>('SetExtensionFallbackProviderIDsJSON', [JSON.stringify(providerIds)]),
   initRepository: () => callCore<void>('InitExtensionRepoJSON', []),
   setRepositoryURL: (url: string) => callCore<void>('SetRepoRegistryURLJSON', [url]),

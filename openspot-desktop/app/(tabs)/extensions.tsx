@@ -70,6 +70,12 @@ export default function ExtensionsScreen() {
 
   const text = useCallback((key: string, fallbackText: string) => t(key, { defaultValue: fallbackText }), [t]);
 
+  const initializeCore = useCallback(async () => {
+    if (!extensionCoreBridge.isAvailable()) return;
+    await extensionCoreBridge.initialize();
+    await extensionCoreBridge.initRepository();
+  }, []);
+
   const loadInstalled = useCallback(async () => {
     if (!extensionCoreBridge.isAvailable()) {
       setError(text('extensions.native_unavailable', 'Extension Core is not available in this build yet.'));
@@ -82,7 +88,7 @@ export default function ExtensionsScreen() {
     ]);
     setInstalled(items);
     setPriority(configuredPriority);
-    setFallback(configuredFallback);
+    setFallback(configuredFallback ?? []);
   }, [text]);
 
   const loadRepository = useCallback(async (forceRefresh = false) => {
@@ -471,10 +477,3 @@ const styles = StyleSheet.create({
   errorBannerText: { flex: 1, color: '#a92f2f', fontSize: 13, lineHeight: 18 },
   loader: { marginTop: 15 },
 });
-
-
-  const initializeCore = useCallback(async () => {
-    if (!extensionCoreBridge.isAvailable()) return;
-    await extensionCoreBridge.initialize();
-    await extensionCoreBridge.initRepository();
-  }, []);

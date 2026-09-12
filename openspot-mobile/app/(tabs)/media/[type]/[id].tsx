@@ -98,6 +98,8 @@ const TrackListItem = React.memo(({ item, index, isCurrentTrack, isPlaying, them
   );
 });
 
+TrackListItem.displayName = 'TrackListItem';
+
 export default function MediaDetailsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -287,7 +289,9 @@ export default function MediaDetailsScreen() {
         const saved = await AsyncStorage.getItem(savedKey);
         setIsSaved(!!saved);
       };
-      checkSavedStatus();
+      void checkSavedStatus().catch((error) => {
+        console.warn('[Media] failed to restore saved state:', error);
+      });
       return () => subscription.remove();
     }, [handleBackPress, mediaType, mediaId])
   );

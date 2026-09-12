@@ -31,6 +31,8 @@ const LANGUAGE_KEY = 'openspot_language_v1';
 const FIRST_RUN_SETUP_KEY = 'openspot_first_run_setup_done_v1';
 const TRENDING_ENABLED_KEY = 'openspot_trending_enabled_v1';
 
+type SetupPickerOption = string | { label: string; value: string; nativeLabel: string };
+
 export default function HomeScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -586,8 +588,8 @@ export default function HomeScreen() {
               <Text style={[styles.setupSectionTitle, { color: theme.textPrimary, marginBottom: 12 }]}>
                 {setupPicker === 'language' ? t('settings.language') : t('settings.region')}
               </Text>
-              <FlatList
-                data={setupPicker === 'language' ? languageOptions : ['auto', ...Object.keys(regionUrlMap)]}
+              <FlatList<SetupPickerOption>
+                data={(setupPicker === 'language' ? languageOptions : ['auto', ...Object.keys(regionUrlMap)]) as SetupPickerOption[]}
                 keyExtractor={(item) => typeof item === 'string' ? item : item.value}
                 renderItem={({ item }) => {
                   const value = typeof item === 'string' ? item : item.value;

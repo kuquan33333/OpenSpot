@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MusicApi } from '../api';
 import { YTMusicAPI } from '../ytmusic-api';
 import { recordDiagnostic } from '../diagnostics';
+import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
 import type { SearchParams, SearchResponse, Track } from '../../types/music';
 
 export type ProviderId = string;
@@ -33,6 +34,7 @@ export type ProviderRegistryEvent =
 
 const LEGACY_PROVIDER_KEY = 'openspot_provider_v1';
 const PROVIDER_PRIORITY_KEY = 'openspot_provider_priority_v2';
+const BUILTIN_PROVIDER_IDS = new Set(['saavn', 'ytmusic']);
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -144,11 +146,21 @@ class ProviderRegistryImpl {
   async getPriority(): Promise<ProviderId[]> {
     const available = new Set(this.providers.keys());
     let stored: ProviderId[] = [];
+    let corePriority: ProviderId[] = [];
+
+    try {
+      if (extensionCoreBridge.isAvailable()) {
+        const configured = await extensionCoreBridge.getProviderPriority();
+        if (Array.isArray(configured)) corePriority = configured;
+      }
+    } catch (error) {
+      recordDiagnostic({ category: 'extension', type: 'priority_read_failed', data: { error: errorMessage(error) } });
+    }
 
     try {
       const raw = await AsyncStorage.getItem(PROVIDER_PRIORITY_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw);
+        const parsed = JSON.parse(raw) as unknown;
         if (Array.isArray(parsed)) stored = parsed.filter((id): id is string => typeof id === 'string');
       }
     } catch {}
@@ -165,6 +177,7 @@ class ProviderRegistryImpl {
     };
 
     add(legacyPreferred);
+    for (const id of corePriority) add(id);
     for (const id of stored) add(id);
     for (const id of available) add(id);
     return result;
@@ -179,8 +192,24 @@ class ProviderRegistryImpl {
 
   private async orderedProviders(hint?: ProviderId | null): Promise<ProviderAdapter[]> {
     const priority = await this.getPriority();
+    let fallbackExtensionIDs: string[] | null = null;
+    try {
+      if (extensionCoreBridge.isAvailable()) {
+        const configured = await extensionCoreBridge.getFallbackProviderIds();
+        fallbackExtensionIDs = Array.isArray(configured) ? configured.map((id) => id.toLowerCase()) : null;
+      }
+    } catch (error) {
+      recordDiagnostic({ category: 'extension', type: 'fallback_read_failed', data: { error: errorMessage(error) } });
+    }
     const ids = hint ? [hint, ...priority.filter((id) => id !== hint)] : priority;
-    return ids.map((id) => this.providers.get(id)).filter((provider): provider is ProviderAdapter => Boolean(provider));
+    return ids
+      .map((id) => this.providers.get(id))
+      .filter((provider): provider is ProviderAdapter => {
+        if (!provider) return false;
+        const explicit = Boolean(hint && provider.id === hint);
+        if (BUILTIN_PROVIDER_IDS.has(provider.id) || explicit || fallbackExtensionIDs === null) return true;
+        return fallbackExtensionIDs.includes(provider.id.toLowerCase());
+      });
   }
 
   async search(params: SearchParams, providerHint?: ProviderId | null): Promise<SearchResponse> {

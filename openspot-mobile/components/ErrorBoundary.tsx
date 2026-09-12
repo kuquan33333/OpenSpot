@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { recordDiagnostic } from '@/lib/diagnostics';
 
 interface Props {
   children: ReactNode;
@@ -22,11 +23,18 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    const scope = this.props.scope ?? 'app';
     console.error('[ErrorBoundary]', {
-      scope: this.props.scope ?? 'app',
+      scope,
       message: error.message,
       stack: error.stack,
       componentStack: errorInfo.componentStack,
+    });
+    recordDiagnostic({
+      category: 'playback',
+      type: 'route_render_failed',
+      message: error.message,
+      data: { scope, stack: error.stack, componentStack: errorInfo.componentStack },
     });
   }
 

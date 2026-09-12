@@ -28,6 +28,7 @@ import { MusicAPI } from '@/lib/music-api';
 import { clearAudioMetaCache } from '@/lib/automix/audio-meta-repository';
 import { clearDiagnostics, getDiagnostics, subscribeDiagnostics } from '@/lib/diagnostics';
 import { clearPlaybackDiagnostics, getPlaybackDiagnostics } from '@/lib/playback/track-player-runtime';
+import { isRecord, parseStoredJSON } from '@/lib/storage-validation';
 const CURRENT_VERSION = '3.1.5';
 const LINKEDIN_URL = 'https://www.linkedin.com/in/jash-gro/';
 const TELEGRAM_URL = 'https://telegram.dog/deveIoper_x';
@@ -226,8 +227,8 @@ export default function SettingsScreen() {
         if (storedRotating !== null) setRotatingCover(storedRotating === 'true');
 
         if (cachedMap) {
-          const parsed = JSON.parse(cachedMap);
-          const merged = ['auto', ...Object.keys(parsed)];
+          const parsed = parseStoredJSON<unknown>(cachedMap, REGION_URL_MAP_KEY, null);
+          const merged = isRecord(parsed) ? ['auto', ...Object.keys(parsed)] : ['auto'];
           setRegionOptions(merged);
           setRegion((current) => (merged.includes(current) ? current : 'auto'));
         }

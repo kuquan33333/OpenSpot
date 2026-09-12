@@ -1,6 +1,7 @@
 import { SearchResponse, SearchParams, Track } from '../types/music';
 import { MusicApi } from './api';
 import { ProviderRegistry, type ProviderId } from './providers/provider-registry';
+import { normalizeStoredTrack, parseStoredJSON } from './storage-validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export class MusicAPI {
@@ -142,8 +143,10 @@ export class MusicAPI {
     try {
       const stored = await AsyncStorage.getItem(this.recentlyPlayedStorageKey);
       if (!stored) return [];
-      const parsed = JSON.parse(stored) as Track[];
-      return Array.isArray(parsed) ? parsed : [];
+      const parsed = parseStoredJSON<unknown>(stored, this.recentlyPlayedStorageKey, []);
+      return Array.isArray(parsed)
+        ? parsed.map(normalizeStoredTrack).filter((track): track is Track => track !== null)
+        : [];
     } catch (error) {
       console.error('Failed to read recently played tracks:', error);
       return [];

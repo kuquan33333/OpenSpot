@@ -379,7 +379,18 @@ func (s *extensionRepo) fetchRegistryUncoalesced(registryURL string, forceRefres
 			LogWarn("ExtensionRepo", "HTTP %d, using cached registry", resp.StatusCode)
 			return cached, nil
 		}
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("registry returned HTTP 404. The URL must point to an existing registry.json file; a GitHub repository URL resolves to its default branch /registry.json")
+		}
 		return nil, fmt.Errorf("registry returned HTTP %d", resp.StatusCode)
+	}
+	contentType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
+	if contentType == "text/html" || contentType == "application/xhtml+xml" {
+		if cached != nil {
+			LogWarn("ExtensionRepo", "Registry returned %s instead of JSON, using cached registry", contentType)
+			return cached, nil
+		}
+		return nil, fmt.Errorf("registry URL returned HTML instead of JSON. Make sure the URL points to a raw registry.json file")
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRegistryBodyBytes+1))
@@ -426,6 +437,9 @@ func parseRegistryBody(body []byte) (*repoRegistry, error) {
 			return nil, fmt.Errorf("registry URL returned a web page instead of JSON. Make sure the URL points to a registry.json file or a GitHub repository that contains one")
 		}
 		return nil, fmt.Errorf("failed to parse registry: %w", err)
+	}
+	if registry.Extensions == nil {
+		return nil, fmt.Errorf("invalid registry: missing extensions array")
 	}
 	validExtensions := make([]repoExtension, 0, len(registry.Extensions))
 	for index := range registry.Extensions {

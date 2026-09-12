@@ -80,10 +80,15 @@ export default function ExtensionsScreen() {
     const documentDirectory = FileSystem.documentDirectory;
     if (!documentDirectory) throw new Error('Extension storage directory is unavailable');
     const cacheDirectory = FileSystem.cacheDirectory ?? documentDirectory;
+    const extensionsDirectory = `${documentDirectory}extensions/`;
     await extensionCoreBridge.initialize(
-      fileUriToPath(`${documentDirectory}extensions`),
+      fileUriToPath(extensionsDirectory),
       fileUriToPath(`${documentDirectory}extension-data`),
     );
+    const loadResult = await extensionCoreBridge.loadFromDirectory(fileUriToPath(extensionsDirectory));
+    if (loadResult.errors.length > 0) {
+      console.warn('[Extensions] some persisted packages could not be restored:', loadResult.errors);
+    }
     await extensionCoreBridge.initRepository(fileUriToPath(`${cacheDirectory}extension-repository`));
   }, []);
 
@@ -99,7 +104,7 @@ export default function ExtensionsScreen() {
     ]);
     setInstalled(items);
     setPriority(configuredPriority);
-    setFallback(configuredFallback);
+    setFallback(configuredFallback ?? []);
     await syncExtensionProviders();
   }, [text]);
 

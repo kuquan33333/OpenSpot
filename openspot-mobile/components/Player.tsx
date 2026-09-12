@@ -20,24 +20,18 @@ import * as Sharing from 'expo-sharing';
 
 import { Track } from '../types/music';
 import { MusicAPI } from '../lib/music-api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FullScreenPlayer } from './FullScreenPlayer';
 import { useLikedSongs } from '../hooks/useLikedSongs';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
 import { ensureTrackPlayerReady, releaseTrackPlayer, withPlaybackRetry } from '@/lib/playback/track-player-runtime';
 import { useAutoMixPlayback } from '@/lib/automix/use-auto-mix-playback';
+import { getOfflineDownload } from '@/lib/offline-download-service';
 
 async function resolveMobileTrackUrl(t: Track): Promise<string> {
   try {
-    const offlineData = await AsyncStorage.getItem(`offline_${t.id}`);
-    if (offlineData) {
-      const { fileUri } = JSON.parse(offlineData);
-      if (fileUri) {
-        const info = await FileSystem.getInfoAsync(fileUri);
-        if (info.exists) return fileUri;
-      }
-    }
+    const offline = await getOfflineDownload(String(t.id));
+    if (offline) return offline.fileUri;
   } catch {}
   return withPlaybackRetry('resolve_stream', () => MusicAPI.getStreamUrl(t.id.toString(), t));
 }
@@ -279,14 +273,8 @@ export function Player({
   
   const resolveTrackUrl = async (t: Track): Promise<string> => {
     try {
-      const offlineData = await AsyncStorage.getItem(`offline_${t.id}`);
-      if (offlineData) {
-        const { fileUri } = JSON.parse(offlineData);
-        if (fileUri) {
-          const info = await FileSystem.getInfoAsync(fileUri);
-          if (info.exists) return fileUri;
-        }
-      }
+      const offline = await getOfflineDownload(String(t.id));
+      if (offline) return offline.fileUri;
     } catch {}
     return withPlaybackRetry('resolve_stream', () => MusicAPI.getStreamUrl(t.id.toString(), t));
   };

@@ -68,6 +68,10 @@ function decodeJSON<T>(operation: string, value: unknown): T {
   return value as T;
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
+}
+
 async function callNative<T>(name: string, ...args: unknown[]): Promise<T> {
   const module = resolveNativeModule();
   const genericCall = module?.call;
@@ -84,19 +88,25 @@ export const isExtensionCoreAvailable = (): boolean => Boolean(resolveNativeModu
 export const extensionCoreBridge = {
   isAvailable: isExtensionCoreAvailable,
   initialize: (extensionsDir: string, dataDir: string) => callNative<void>('InitExtensionSystem', extensionsDir, dataDir),
-  loadFromDirectory: (directory: string) => callNative<{ loaded: number; errors: string[] }>('LoadExtensionsFromDir', directory),
+  loadFromDirectory: async (directory: string) => {
+    const result = await callNative<{ loaded?: unknown; errors?: unknown }>('LoadExtensionsFromDir', directory);
+    return { loaded: typeof result?.loaded === 'number' ? result.loaded : 0, errors: stringArray(result?.errors) };
+  },
   loadFromPath: (filePath: string) => callNative<InstalledExtension>('LoadExtensionFromPath', filePath),
   remove: (extensionId: string) => callNative<void>('RemoveExtensionByID', extensionId),
   upgradeFromPath: (filePath: string) => callNative<InstalledExtension>('UpgradeExtensionFromPath', filePath),
   checkUpgradeFromPath: (filePath: string) => callNative<{ extension_id: string; new_version: string; current_version?: string; is_installed: boolean; can_upgrade: boolean }>('CheckExtensionUpgradeFromPath', filePath),
-  getInstalled: () => callNative<InstalledExtension[]>('GetInstalledExtensions'),
+  getInstalled: async () => {
+    const result = await callNative<unknown>('GetInstalledExtensions');
+    return (Array.isArray(result) ? result : []).filter((item): item is InstalledExtension => Boolean(item && typeof item === 'object'));
+  },
   setEnabled: (extensionId: string, enabled: boolean) => callNative<void>('SetExtensionEnabledByID', extensionId, enabled),
   getSettings: (extensionId: string) => callNative<Record<string, unknown>>('GetExtensionSettingsJSON', extensionId),
   setSettings: (extensionId: string, settings: Record<string, unknown>) =>
     callNative<void>('SetExtensionSettingsJSON', extensionId, JSON.stringify(settings)),
-  getProviderPriority: () => callNative<string[]>('GetProviderPriorityJSON'),
+  getProviderPriority: async () => stringArray(await callNative<unknown>('GetProviderPriorityJSON')),
   setProviderPriority: (priority: string[]) => callNative<void>('SetProviderPriorityJSON', JSON.stringify(priority)),
-  getMetadataProviderPriority: () => callNative<string[]>('GetMetadataProviderPriorityJSON'),
+  getMetadataProviderPriority: async () => stringArray(await callNative<unknown>('GetMetadataProviderPriorityJSON')),
   setMetadataProviderPriority: (priority: string[]) => callNative<void>('SetMetadataProviderPriorityJSON', JSON.stringify(priority)),
   searchMetadata: (query: string, limit = 20, includeExtensions = true) =>
     callNative<Array<Record<string, unknown>>>('SearchTracksWithMetadataProvidersJSON', query, limit, includeExtensions),
@@ -104,15 +114,21 @@ export const extensionCoreBridge = {
     callNative<Array<Record<string, unknown>>>('SearchTracksWithMetadataProviderJSON', providerId, query, limit),
   getProviderMetadata: (providerId: string, resourceType: string, resourceId: string) =>
     callNative<Record<string, unknown>>('GetProviderMetadataJSON', providerId, resourceType, resourceId),
-  getFallbackProviderIds: () => callNative<string[]>('GetExtensionFallbackProviderIDsJSON'),
+  getFallbackProviderIds: () => callNative<string[] | null>('GetExtensionFallbackProviderIDsJSON'),
   setFallbackProviderIds: (providerIds: string[]) =>
     callNative<void>('SetExtensionFallbackProviderIDsJSON', JSON.stringify(providerIds)),
   initRepository: (cacheDir: string) => callNative<void>('InitExtensionRepoJSON', cacheDir),
   setRepositoryURL: (url: string) => callNative<void>('SetRepoRegistryURLJSON', url),
   getRepositoryURL: () => callNative<string>('GetRepoRegistryURLJSON'),
-  listRepository: (forceRefresh = false) => callNative<RepositoryExtension[]>('GetRepoExtensionsJSON', forceRefresh),
-  searchRepository: (query: string, category = '') => callNative<RepositoryExtension[]>('SearchRepoExtensionsJSON', query, category),
-  getRepositoryCategories: () => callNative<string[]>('GetRepoCategoriesJSON'),
+  listRepository: async (forceRefresh = false) => {
+    const result = await callNative<unknown>('GetRepoExtensionsJSON', forceRefresh);
+    return (Array.isArray(result) ? result : []) as RepositoryExtension[];
+  },
+  searchRepository: async (query: string, category = '') => {
+    const result = await callNative<unknown>('SearchRepoExtensionsJSON', query, category);
+    return (Array.isArray(result) ? result : []) as RepositoryExtension[];
+  },
+  getRepositoryCategories: async () => stringArray(await callNative<unknown>('GetRepoCategoriesJSON')),
   downloadRepositoryExtension: (extensionId: string, destination: string) =>
     callNative<string>('DownloadRepoExtensionJSON', extensionId, destination),
   clearRepositoryCache: () => callNative<void>('ClearRepoCacheJSON'),

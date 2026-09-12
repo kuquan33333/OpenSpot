@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Track } from '@/types/music';
 import type { SongAudioMeta } from './auto-mix-types';
 import { recordDiagnostic } from '@/lib/diagnostics';
+import { isRecord, parseStoredJSON } from '@/lib/storage-validation';
 
 const AUDIO_META_KEY_PREFIX = 'openspot_audio_meta_v1:';
 export const AUDIO_META_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -26,8 +27,10 @@ export async function getCachedAudioMeta(track: Pick<Track, 'provider' | 'id'>):
   try {
     const raw = await AsyncStorage.getItem(cacheKey(track));
     if (!raw) return null;
-    const stored = JSON.parse(raw) as StoredAudioMeta;
-    if (!stored.expiresAt || stored.expiresAt <= Date.now()) {
+    const stored = parseStoredJSON<unknown>(raw, cacheKey(track), null);
+    if (!isRecord(stored)) return null;
+    const expiresAt = typeof stored.expiresAt === 'number' ? stored.expiresAt : 0;
+    if (!expiresAt || expiresAt <= Date.now()) {
       await AsyncStorage.removeItem(cacheKey(track));
       return null;
     }
