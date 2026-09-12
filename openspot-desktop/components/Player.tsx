@@ -22,6 +22,30 @@ import { useColorScheme } from '../hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
 import { ensureTrackPlayerReady, releaseTrackPlayer, withPlaybackRetry } from '@/lib/playback/track-player-runtime';
 import { getPlayableOfflineUri, isTauriRuntime } from '@/lib/tauri-offline';
+import { useAutoMixPlayback } from '@/lib/automix/use-auto-mix-playback';
+
+async function resolveDesktopTrackUrl(t: Track): Promise<string> {
+  const offlineUri = (t as Track & { offlineUri?: string }).offlineUri;
+  if (offlineUri) {
+    if (isTauriRuntime()) return getPlayableOfflineUri(offlineUri, 'audio/mpeg');
+    try {
+      const info = await FileSystem.getInfoAsync(offlineUri);
+      if (info.exists) return offlineUri;
+    } catch {}
+  }
+  try {
+    const offlineData = await AsyncStorage.getItem(`offline_${t.id}`);
+    if (offlineData) {
+      const { fileUri } = JSON.parse(offlineData);
+      if (fileUri) {
+        if (isTauriRuntime()) return getPlayableOfflineUri(fileUri, 'audio/mpeg');
+        const info = await FileSystem.getInfoAsync(fileUri);
+        if (info.exists) return fileUri;
+      }
+    }
+  } catch {}
+  return withPlaybackRetry('resolve_stream', () => MusicAPI.getStreamUrl(t.id.toString(), t));
+}
 
 interface PlayerProps {
   track: Track | null;
@@ -84,6 +108,22 @@ export function Player({
   const handledEndedTrackRef = useRef<string | number | null>(null);
   const lastAutoAdvanceAtRef = useRef(0);
   const { position: tpPosition, duration: tpDuration } = useProgress(250);
+  const autoMixNextTrack = musicQueue?.tracks?.[musicQueue.currentIndex + 1] ?? null;
+  const autoMixRuntime = useAutoMixPlayback({
+    track,
+    nextTrack: autoMixNextTrack,
+    queue: musicQueue,
+    isPlaying,
+    resolveUrl: resolveDesktopTrackUrl,
+    onPlayingChange,
+  });
+
+  useEffect(() => {
+    if (!autoMixRuntime.active) return;
+    lastQueueSignatureRef.current = null;
+    void TrackPlayer.pause().catch(() => {});
+    void TrackPlayer.reset().catch(() => {});
+  }, [autoMixRuntime.active]);
 
   
   useEffect(() => {
@@ -119,15 +159,24 @@ export function Player({
 
   
   useEffect(() => {
+    if (autoMixRuntime.active) {
+      setPosition(autoMixRuntime.positionMs);
+      setDuration(autoMixRuntime.durationMs);
+      return;
+    }
     if (!isSeeking) {
       setPosition(tpPosition * 1000);
     }
     setDuration(tpDuration * 1000);
-  }, [tpPosition, tpDuration, isSeeking]);
+  }, [autoMixRuntime.active, autoMixRuntime.durationMs, autoMixRuntime.positionMs, tpPosition, tpDuration, isSeeking]);
 
   
   useEffect(() => {
     if (!playerReady) return;
+    if (autoMixRuntime.active) {
+      void (isPlaying ? autoMixRuntime.play() : autoMixRuntime.pause()).catch(() => {});
+      return;
+    }
     isInternalChangeRef.current = true;
     if (isPlaying) {
       pendingAutoPlayRef.current = true;
@@ -137,7 +186,7 @@ export function Player({
     }
     const timer = setTimeout(() => { isInternalChangeRef.current = false; }, 800);
     return () => clearTimeout(timer);
-  }, [isPlaying, playerReady, pendingAutoPlayRef]);
+  }, [autoMixRuntime.active, autoMixRuntime.pause, autoMixRuntime.play, isPlaying, playerReady, pendingAutoPlayRef]);
 
   
   const startRotation = useCallback(() => {
@@ -240,15 +289,17 @@ export function Player({
   
   useEffect(() => {
     const sub = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
+      if (autoMixRuntime.active) return;
       const mode = await TrackPlayer.getRepeatMode();
       if (mode === RepeatMode.Off) {
         playNextTrack(false);
       }
     });
     return () => sub.remove();
-  }, [playNextTrack]);
+  }, [autoMixRuntime.active, playNextTrack]);
 
   useEffect(() => {
+    if (autoMixRuntime.active) return;
     if (!track || !isPlaying || duration <= 0) return;
 
     const cooldownElapsed = Date.now() - lastAutoAdvanceAtRef.current;
@@ -282,11 +333,12 @@ export function Player({
         }
       }
     });
-  }, [duration, isPlaying, playNextTrack, position, track]);
+  }, [autoMixRuntime.active, duration, isPlaying, playNextTrack, position, track]);
 
   
   useEffect(() => {
     const sub = TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+      if (autoMixRuntime.active) return;
       
       if (isInternalChangeRef.current) return;
 
@@ -298,10 +350,11 @@ export function Player({
       }
     });
     return () => sub.remove();
-  }, [isPlaying, onPlayingChange]);
+  }, [autoMixRuntime.active, isPlaying, onPlayingChange]);
   
   useEffect(() => {
     const sub = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event) => {
+      if (autoMixRuntime.active) return;
       if (isInternalChangeRef.current) return;
       const activeTrack = event.track;
       if (activeTrack?.id && musicQueueRef.current?.tracks?.length) {
@@ -314,10 +367,11 @@ export function Player({
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [autoMixRuntime.active]);
 
   
   const syncTrackPlayerQueue = useCallback(async () => {
+    if (autoMixRuntime.active) return;
     if (!playerReady) return;
     if (!musicQueue?.tracks?.length || musicQueue.currentIndex < 0) return;
     if (!track) return;
@@ -485,7 +539,7 @@ export function Player({
         }
       })();
     }, 50);
-  }, [playerReady, musicQueue?.tracks, musicQueue?.currentIndex, track, isPlaying, onPlayingChange, pendingAutoPlayRef, t]);
+  }, [autoMixRuntime.active, playerReady, musicQueue?.tracks, musicQueue?.currentIndex, track, isPlaying, onPlayingChange, pendingAutoPlayRef, t]);
 
   
   useEffect(() => {
@@ -499,6 +553,17 @@ export function Player({
     try {
       
       isInternalChangeRef.current = true;
+      if (autoMixRuntime.active) {
+        if (isPlaying) {
+          await autoMixRuntime.pause();
+          onPlayingChange(false);
+        } else {
+          await autoMixRuntime.play();
+          onPlayingChange(true);
+        }
+        isInternalChangeRef.current = false;
+        return;
+      }
       
       if (isPlaying) {
         await TrackPlayer.pause();
@@ -517,12 +582,13 @@ export function Player({
       console.error('Error in handlePlayPause:', error);
       isInternalChangeRef.current = false;
     }
-  }, [isPlaying, onPlayingChange, pendingAutoPlayRef]);
+  }, [autoMixRuntime.active, autoMixRuntime.pause, autoMixRuntime.play, isPlaying, onPlayingChange, pendingAutoPlayRef]);
 
   const handleSeek = async (value: number) => {
     try {
       setPosition(value);
-      await TrackPlayer.seekTo(value / 1000);
+      if (autoMixRuntime.active) await autoMixRuntime.seekTo(value);
+      else await TrackPlayer.seekTo(value / 1000);
     } catch (error) {
       console.error('Error seeking:', error);
     }
@@ -530,13 +596,15 @@ export function Player({
 
   const handleVolumeChange = async (value: number) => {
     setVolume(value);
-    await TrackPlayer.setVolume(isMuted ? 0 : value).catch(() => {});
+    if (autoMixRuntime.active) await autoMixRuntime.setVolume(isMuted ? 0 : value).catch(() => {});
+    else await TrackPlayer.setVolume(isMuted ? 0 : value).catch(() => {});
   };
   const handleMute = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newMutedState = !isMuted;
     setIsMuted(newMutedState);
-    await TrackPlayer.setVolume(newMutedState ? 0 : volume).catch(() => {});
+    if (autoMixRuntime.active) await autoMixRuntime.setVolume(newMutedState ? 0 : volume).catch(() => {});
+    else await TrackPlayer.setVolume(newMutedState ? 0 : volume).catch(() => {});
   };
   const handleShuffle = () => musicQueue.toggleShuffle();
 

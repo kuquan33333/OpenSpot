@@ -69,6 +69,7 @@ export class AutoMixEngine<T extends AutoMixTrack> {
   getState(): AutoMixPlayerState { return this.state; }
   getCurrentTrack(): T | null { return this.current?.track ?? null; }
   getNextTrack(): T | null { return this.secondary?.track ?? null; }
+  getCurrentPlayer(): AutoMixAudioPlayer | null { return this.current?.player ?? null; }
 
   setSettings(settings: AutoMixSettings): void {
     this.settings = settings;
@@ -105,10 +106,11 @@ export class AutoMixEngine<T extends AutoMixTrack> {
     this.setState('PREPARING');
     await this.releaseSecondary();
 
+    let player: AutoMixAudioPlayer | null = null;
     try {
       const cached = this.precached.get(track.id);
       if (cached) this.precached.delete(track.id);
-      const player = cached?.player ?? await this.options.createPlayer();
+      player = cached?.player ?? await this.options.createPlayer();
       if (!cached) {
         const url = await this.options.resolveUrl(track, signal);
         await player.load(url);
@@ -124,6 +126,7 @@ export class AutoMixEngine<T extends AutoMixTrack> {
       this.emitDiagnostic({ type: 'precache_ready', trackId: track.id });
       return true;
     } catch (error) {
+      await player?.release().catch(() => {});
       if (signal.aborted) return false;
       this.setState('ERROR');
       this.emitDiagnostic({ type: 'precache_failed', trackId: track.id, detail: { error: String(error) } });
@@ -134,8 +137,9 @@ export class AutoMixEngine<T extends AutoMixTrack> {
   async precache(track: T): Promise<boolean> {
     if (this.settings.mode === 'off' || this.precached.has(track.id)) return false;
     const controller = new AbortController();
+    let player: AutoMixAudioPlayer | null = null;
     try {
-      const player = await this.options.createPlayer();
+      player = await this.options.createPlayer();
       const url = await this.options.resolveUrl(track, controller.signal);
       await player.load(url);
       await player.setVolume(0);
@@ -148,6 +152,7 @@ export class AutoMixEngine<T extends AutoMixTrack> {
       this.emitDiagnostic({ type: 'precache_ready', trackId: track.id });
       return true;
     } catch (error) {
+      await player?.release().catch(() => {});
       this.emitDiagnostic({ type: 'precache_failed', trackId: track.id, detail: { error: String(error) } });
       return false;
     }

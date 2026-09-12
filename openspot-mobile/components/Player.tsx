@@ -26,6 +26,21 @@ import { useLikedSongs } from '../hooks/useLikedSongs';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
 import { ensureTrackPlayerReady, releaseTrackPlayer, withPlaybackRetry } from '@/lib/playback/track-player-runtime';
+import { useAutoMixPlayback } from '@/lib/automix/use-auto-mix-playback';
+
+async function resolveMobileTrackUrl(t: Track): Promise<string> {
+  try {
+    const offlineData = await AsyncStorage.getItem(`offline_${t.id}`);
+    if (offlineData) {
+      const { fileUri } = JSON.parse(offlineData);
+      if (fileUri) {
+        const info = await FileSystem.getInfoAsync(fileUri);
+        if (info.exists) return fileUri;
+      }
+    }
+  } catch {}
+  return withPlaybackRetry('resolve_stream', () => MusicAPI.getStreamUrl(t.id.toString(), t));
+}
 
 interface PlayerProps {
   track: Track | null;
@@ -108,6 +123,22 @@ export function Player({
   }, []);
 
   const { position: tpPosition, duration: tpDuration } = useProgress(250);
+  const autoMixNextTrack = musicQueue?.tracks?.[musicQueue.currentIndex + 1] ?? null;
+  const autoMixRuntime = useAutoMixPlayback({
+    track,
+    nextTrack: autoMixNextTrack,
+    queue: musicQueue,
+    isPlaying,
+    resolveUrl: resolveMobileTrackUrl,
+    onPlayingChange,
+  });
+
+  useEffect(() => {
+    if (!autoMixRuntime.active) return;
+    lastQueueSignatureRef.current = null;
+    void TrackPlayer.pause().catch(() => {});
+    void TrackPlayer.reset().catch(() => {});
+  }, [autoMixRuntime.active]);
 
   
   useEffect(() => {
@@ -149,11 +180,17 @@ export function Player({
 
   
   useEffect(() => {
-    TrackPlayer.setVolume(volume).catch(() => {});
-  }, [volume]);
+    if (autoMixRuntime.active) void autoMixRuntime.setVolume(isMuted ? 0 : volume).catch(() => {});
+    else TrackPlayer.setVolume(volume).catch(() => {});
+  }, [autoMixRuntime.active, autoMixRuntime.setVolume, isMuted, volume]);
 
   
   useEffect(() => {
+    if (autoMixRuntime.active) {
+      setPosition(autoMixRuntime.positionMs);
+      setDuration(autoMixRuntime.durationMs);
+      return;
+    }
     if (!isSeeking) {
       setPosition(tpPosition * 1000);
     }
@@ -161,11 +198,15 @@ export function Player({
       const next = tpDuration * 1000;
       return prev !== next ? next : prev;
     });
-  }, [tpPosition, tpDuration, isSeeking]);
+  }, [autoMixRuntime.active, autoMixRuntime.durationMs, autoMixRuntime.positionMs, tpPosition, tpDuration, isSeeking]);
 
   
   useEffect(() => {
     if (!playerReady) return;
+    if (autoMixRuntime.active) {
+      void (isPlaying ? autoMixRuntime.play() : autoMixRuntime.pause()).catch(() => {});
+      return;
+    }
     suppressInternalChanges(800);
     if (isPlaying) {
       pendingAutoPlayRef.current = true;
@@ -179,7 +220,7 @@ export function Player({
         internalChangeTimerRef.current = null;
       }
     };
-  }, [isPlaying, playerReady, pendingAutoPlayRef, suppressInternalChanges]);
+  }, [autoMixRuntime.active, autoMixRuntime.pause, autoMixRuntime.play, isPlaying, playerReady, pendingAutoPlayRef, suppressInternalChanges]);
 
   
   const startRotation = useCallback(() => {
@@ -262,16 +303,18 @@ export function Player({
   
   useEffect(() => {
     const sub = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+      if (autoMixRuntime.active) return;
       if (isInternalChangeRef.current) return;
       pendingAutoPlayRef.current = true;
       handleNext();
     });
     return () => sub.remove();
-  }, [handleNext, pendingAutoPlayRef]);
+  }, [autoMixRuntime.active, handleNext, pendingAutoPlayRef]);
 
   
   useEffect(() => {
     const sub = TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+      if (autoMixRuntime.active) return;
       
       if (isInternalChangeRef.current) return;
 
@@ -283,10 +326,11 @@ export function Player({
       }
     });
     return () => sub.remove();
-  }, [isPlaying, onPlayingChange]);
+  }, [autoMixRuntime.active, isPlaying, onPlayingChange]);
   
   useEffect(() => {
     const sub = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event) => {
+      if (autoMixRuntime.active) return;
       if (isInternalChangeRef.current) return;
       const activeTrack = event.track;
       if (!activeTrack?.id) return;
@@ -304,10 +348,14 @@ export function Player({
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [autoMixRuntime.active]);
 
   
   const syncTrackPlayerQueue = useCallback(async () => {
+    if (autoMixRuntime.active) {
+      pendingAutoPlayRef.current = false;
+      return;
+    }
     if (!playerReady) {
       pendingAutoPlayRef.current = false;
       return;
@@ -497,7 +545,7 @@ export function Player({
         }
       })();
     }, 50);
-  }, [playerReady, musicQueue?.tracks, musicQueue?.currentIndex, track, isPlaying, onPlayingChange, pendingAutoPlayRef, t]);
+  }, [autoMixRuntime.active, playerReady, musicQueue?.tracks, musicQueue?.currentIndex, track, isPlaying, onPlayingChange, pendingAutoPlayRef, t]);
 
   
   useEffect(() => {
@@ -511,6 +559,16 @@ export function Player({
     try {
       
       suppressInternalChanges(500);
+      if (autoMixRuntime.active) {
+        if (isPlaying) {
+          await autoMixRuntime.pause();
+          onPlayingChange(false);
+        } else {
+          await autoMixRuntime.play();
+          onPlayingChange(true);
+        }
+        return;
+      }
       
       if (isPlaying) {
         await TrackPlayer.pause();
@@ -524,12 +582,13 @@ export function Player({
       console.error('Error in handlePlayPause:', error);
       isInternalChangeRef.current = false;
     }
-  }, [isPlaying, onPlayingChange, pendingAutoPlayRef, suppressInternalChanges]);
+  }, [autoMixRuntime.active, autoMixRuntime.pause, autoMixRuntime.play, isPlaying, onPlayingChange, pendingAutoPlayRef, suppressInternalChanges]);
 
   const handleSeek = async (value: number) => {
     try {
       setPosition(value);
-      await TrackPlayer.seekTo(value / 1000);
+      if (autoMixRuntime.active) await autoMixRuntime.seekTo(value);
+      else await TrackPlayer.seekTo(value / 1000);
     } catch (error) {
       console.error('Error seeking:', error);
     }
@@ -537,13 +596,15 @@ export function Player({
 
   const handleVolumeChange = async (value: number) => {
     setVolume(value);
-    await TrackPlayer.setVolume(isMuted ? 0 : value).catch(() => {});
+    if (autoMixRuntime.active) await autoMixRuntime.setVolume(isMuted ? 0 : value).catch(() => {});
+    else await TrackPlayer.setVolume(isMuted ? 0 : value).catch(() => {});
   };
   const handleMute = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newMutedState = !isMuted;
     setIsMuted(newMutedState);
-    await TrackPlayer.setVolume(newMutedState ? 0 : volume).catch(() => {});
+    if (autoMixRuntime.active) await autoMixRuntime.setVolume(newMutedState ? 0 : volume).catch(() => {});
+    else await TrackPlayer.setVolume(newMutedState ? 0 : volume).catch(() => {});
   };
   const handleShuffle = () => musicQueue.toggleShuffle();
 
