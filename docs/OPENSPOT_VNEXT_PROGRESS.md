@@ -18,19 +18,27 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 - [x] P0 full baseline audit complete
 - [~] P1 playback runtime recovery — runtime lifecycle/retry diagnostics centralized; background/audio-focus and live takeover QA pending
 - [x] P2 provider core complete
-- [~] P3 SpotiFLAC Extension Core direct port — active, core boundary corrected
+- [~] P3 SpotiFLAC Extension Core direct port — pinned core boundary and native host bridges implemented; device/package verification pending
 - [~] P4 `.sflx` compatibility — package validation/extraction ported, host integration pending
 - [~] P5 manifest/permission parity — manifest/permission/runtime HTTP/file sandbox foundations ported, host integration pending
-- [~] P6 extension repository/store — core registry/cache/download APIs and host/UI bridge added; native install/update runtime pending
-- [~] P7 extension UI — mobile/desktop Extensions surface added; native install/update/detail actions pending
-- [~] P8 provider priority/fallback — provider-neutral priority and metadata-provider fallback wired; native provider runtime pending
-- [~] P9 first-party providers migrated — existing providers remain registered through the neutral host registry; extension provider loading pending
+- [~] P6 extension repository/store — registry/cache/download APIs, package lifecycle bridge and desktop Go sidecar are implemented; live repository verification pending
+- [~] P7 extension UI — mobile/desktop store, detail, install/update/remove and health controls are wired; device verification pending
+- [~] P8 provider priority/fallback — provider-neutral priority, metadata aggregation and fallback resolution are wired; live extension provider verification pending
+- [~] P9 first-party providers migrated — built-ins remain behind the neutral registry and installed extension adapters are wired; provider migration/live verification pending
 - [x] P10 Search bottom tab replaced with Mix
-- [~] P11-P19 SimpMusic AutoMix engine parity — planner, equal-power transition, filter/ramp contracts, settings and edge guards added; live Player/DSP integration pending
+- [~] P11-P19 SimpMusic AutoMix engine parity — planner, equal-power transition, filter/ramp contracts, settings, overlapping mobile/desktop players and takeover are wired; device/DSP edge-case QA pending
 - [~] P20-P21 Mix UI/settings — mobile/desktop controls and persistence added; live playback binding pending
 - [~] P22 Vietnamese mobile + desktop — locale registration and primary-screen translation added; remaining legacy update/footer copy is still being migrated
 - [~] P23-P27 settings/search/cache/diagnostics integration — cache clearing, AutoMix metadata TTL cache and structured provider/playback/AutoMix diagnostics are integrated; remaining settings/search/runtime wiring pending
-- [~] P28-P30 parity tests and cross-platform QA — deterministic parity checks, Rust/static checks and Check All CI are green; runtime device/audio-focus/long-queue QA remains pending
+- [~] P28-P30 parity tests and cross-platform QA — deterministic parity checks, Go/Rust/static checks and sidecar smoke checks are green; runtime device/audio-focus/long-queue QA remains pending
+
+## Latest local verification (2026-09-12)
+
+- extension_manager.go matches the staged SpotiFLAC-Mobile source exactly after normalizing line endings; no extsions/extsionsDir typo remains.
+- Go gofmt, vet and test ./... -count=1 pass, including the new cmd/extension-core-host package.
+- Rust cargo check --locked and rustfmt --edition 2021 --check src/lib.rs pass with the target-named Windows sidecar present.
+- Sidecar smoke test passes JSON request/response and creates a persistent 32-byte storage key.
+- Locale/config JSON checks and git diff --check pass. TypeScript dependency installation remains unavailable locally because the npm registry response is not cached; no GitHub Action was spent for that check.
 
 ## SpotiFLAC Extension Core
 
@@ -88,9 +96,9 @@ Temporary diagnostic workflows used while locating the dependency leak were remo
 
 1. [x] Run the manual Extension Core boundary/gofmt/vet/test check on the current branch.
 2. [~] Finish Vietnamese primary-flow coverage and static parity checks.
-3. [~] Wire the native Extension Core runtime and live AutoMix player/DSP adapters where the existing platform contracts allow it.
+3. [~] Wire the native Extension Core runtime and live AutoMix player/DSP adapters where the existing platform contracts allow it — desktop sidecar and Android/iOS module paths are now present; device/runtime QA remains.
 4. [x] Run the manual cross-platform check workflow, fix every actionable failure, and repeat until green.
-5. [~] Dispatch the manual unsigned iOS IPA workflow and verify the uploaded artifact on the final commit.
+5. [~] Push the verified feature commit, dispatch the manual unsigned iOS IPA workflow once, and verify the uploaded artifact on the final commit.
 
 ## Rules
 
