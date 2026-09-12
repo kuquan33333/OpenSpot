@@ -25,6 +25,8 @@ jobs:
         run: npm run lint
       - name: TypeScript
         run: npx tsc --noEmit
+      - name: AutoMix takeover regression
+        run: npm run test:automix
 
   desktop-check:
     name: Desktop UI - lint and typecheck
@@ -43,6 +45,8 @@ jobs:
         run: npm run lint
       - name: TypeScript
         run: npx tsc --noEmit
+      - name: AutoMix takeover regression
+        run: npm run test:automix
 
   extension-go-check:
     name: Extension Core - Go test

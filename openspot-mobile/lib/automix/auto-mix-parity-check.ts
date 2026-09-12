@@ -7,8 +7,8 @@ import {
   keyToCamelot,
   planAutoMixTransition,
   resolveAutoCrossfadeDuration,
+  DEFAULT_AUTO_MIX_SETTINGS,
 } from './auto-mix-algorithms';
-import { DEFAULT_AUTO_MIX_SETTINGS } from './auto-mix-algorithms';
 
 export interface AutoMixParityCheckResult {
   passed: boolean;

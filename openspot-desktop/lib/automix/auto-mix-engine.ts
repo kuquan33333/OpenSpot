@@ -199,11 +199,18 @@ export class AutoMixEngine<T extends AutoMixTrack> {
       }
       await incoming.player.setVolume(1);
       await outgoing.player.setVolume(0);
-      await this.options.onTakeover?.({ track: next, player: incoming.player, plan });
-      await outgoing.player.stop().catch(() => {});
-      await outgoing.player.release().catch(() => {});
+      // Promote before notifying React so the current-track effect keeps the
+      // already-playing incoming player instead of reloading it at position 0.
       this.current = incoming;
       this.secondary = null;
+      this.emitDiagnostic({ type: 'automix_takeover_ready', trackId: next.id });
+      try {
+        await this.options.onTakeover?.({ track: next, player: incoming.player, plan });
+      } catch (error) {
+        this.emitDiagnostic({ type: 'automix_takeover_callback_failed', trackId: next.id, detail: { error: String(error) } });
+      }
+      await outgoing.player.stop().catch(() => {});
+      await outgoing.player.release().catch(() => {});
       this.emitDiagnostic({ type: 'automix_finished', trackId: next.id });
       this.setState('PLAYING');
     } catch (error) {
