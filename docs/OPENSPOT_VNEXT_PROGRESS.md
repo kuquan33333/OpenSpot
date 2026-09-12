@@ -48,7 +48,7 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 - Mobile Extension tabs now use a two-column wrapped layout on narrow screens, and Settings Extension/Mix action buttons have a non-shrinking inline layout so their labels and chevrons remain visible.
 - Extension native response decoding now accepts both raw and JSON-quoted registry URLs/package paths. The live test registry and `.sflx` package return HTTP 200 and the package SHA-256 matches the registry entry.
 - Search and stream resolution caches on mobile and desktop now use five-minute TTLs and evict rejected promises, preventing stale provider failures from being retained indefinitely.
-- GitHub Actions run `#7` on commit `c4ee3a3` passed the mobile/desktop/Go/Rust preflight and the unsigned iOS archive/package/upload. Artifact `OpenSpot-IPA` is 16.1 MB with digest `sha256:cfb7044ada78c167ad35656774cb072cfb44912ab44ab3aacbe8e60ddd2bc2b2`; device regression coverage remains pending.
+- GitHub Actions run `#8` on commit `4b2b4ea0169ac5f1a4942af6f3b273b75f4510c3` passed the mobile/desktop/Go/Rust/Tauri preflight and the unsigned iOS archive, bundle verification, package and upload. Artifact `OpenSpot-IPA` (ID `10300283824`) is 16,831,814 bytes with digest `sha256:8f17f65c0cd6daf70c625ee1de387927d008c0b829967b905b14e3a25431f740`; device regression coverage remains pending.
 
 ## SpotiFLAC Extension Core
 
@@ -108,7 +108,7 @@ Temporary diagnostic workflows used while locating the dependency leak were remo
 2. [~] Finish Vietnamese primary-flow coverage and static parity checks.
 3. [~] Wire the native Extension Core runtime and live AutoMix player/DSP adapters where the existing platform contracts allow it — desktop sidecar and Android/iOS module paths are now present; device/runtime QA remains.
 4. [x] Run the manual cross-platform check workflow, fix every actionable failure, and repeat until green.
-5. [x] Push the verified feature commit, dispatch the manual unsigned iOS IPA workflow once, and verify the uploaded artifact on the final commit; device regression coverage remains pending.
+5. [x] Push the verified feature commit, dispatch the manual unsigned iOS IPA workflow once, and verify the uploaded artifact on the final commit; device regression coverage remains pending. Run `#8` is the current artifact evidence.
 
 ## Rules
 
