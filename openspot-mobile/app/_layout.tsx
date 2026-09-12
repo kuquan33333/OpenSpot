@@ -3,10 +3,12 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useThemeMode, ThemeModeProvider } from '@/hooks/theme-mode';
+import { AppInitializationProvider, useAppInitialization } from '@/lib/app-initialization';
 import { LikedSongsProvider } from '@/hooks/useLikedSongs';
 import { useApiStatus } from '@/hooks/useApiStatus';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -15,7 +17,8 @@ import '@/lib/i18n';
 SplashScreen.preventAutoHideAsync();
 
 function AppNavigation() {
-  const { resolvedScheme } = useThemeMode();
+  const { resolvedScheme, ready: themeReady } = useThemeMode();
+  const { ready: appReady } = useAppInitialization();
   const { apiStatus, loading } = useApiStatus();
   const PROVIDER_KEY = 'openspot_provider_v1';
 
@@ -41,6 +44,14 @@ function AppNavigation() {
 
     checkAndSwitchProvider();
   }, [apiStatus, loading]);
+
+  if (!appReady || !themeReady) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: resolvedScheme === 'dark' ? '#050505' : '#f5efe6' }}>
+        <ActivityIndicator color={resolvedScheme === 'dark' ? '#1DB954' : '#167c3a'} />
+      </View>
+    );
+  }
 
   return (
     <LikedSongsProvider>
@@ -71,9 +82,11 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
-        <ThemeModeProvider>
-          <AppNavigation />
-        </ThemeModeProvider>
+        <AppInitializationProvider>
+          <ThemeModeProvider>
+            <AppNavigation />
+          </ThemeModeProvider>
+        </AppInitializationProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
   );

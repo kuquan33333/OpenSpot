@@ -8,6 +8,7 @@ interface ThemeModeContextValue {
   mode: ThemeMode;
   setMode: (mode: ThemeMode) => void;
   resolvedScheme: ResolvedScheme;
+  ready: boolean;
 }
 
 const STORAGE_KEY = 'openspot_theme_mode_v1';
@@ -20,6 +21,7 @@ function getAutoSchemeByTime(date: Date = new Date()): ResolvedScheme {
 
 export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>('auto');
+  const [ready, setReady] = useState(false);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -33,6 +35,8 @@ export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('Failed to load theme mode:', error);
+      } finally {
+        if (mounted) setReady(true);
       }
     };
     void loadMode();
@@ -62,7 +66,7 @@ export function ThemeModeProvider({ children }: { children: React.ReactNode }) {
   }, [mode, tick]);
 
   return (
-    <ThemeModeContext.Provider value={{ mode, setMode, resolvedScheme }}>
+    <ThemeModeContext.Provider value={{ mode, setMode, resolvedScheme, ready }}>
       {children}
     </ThemeModeContext.Provider>
   );

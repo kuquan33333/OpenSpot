@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, StatusBar, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, FlatList } from 'react-native';
+import { View, StyleSheet, StatusBar, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, FlatList, InteractionManager } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSearch } from '@/hooks/useSearch';
 import { TopBar } from '@/components/TopBar';
@@ -68,8 +68,8 @@ export default function HomeScreen() {
   const [setupLanguage, setSetupLanguage] = useState<string>('en');
   const [setupTheme, setSetupTheme] = useState<ThemeMode>(mode);
   const [isSavingSetup, setIsSavingSetup] = useState(false);
-  const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
-  const [isRegionModalOpen, setIsRegionModalOpen] = useState(false);
+  const [setupModalReady, setSetupModalReady] = useState(false);
+  const [setupPicker, setSetupPicker] = useState<'language' | 'region' | null>(null);
   const { isOffline } = useConnectivity();
   const wasOfflineRef = React.useRef(false);
   const [trendingEnabled, setTrendingEnabled] = useState<boolean>(true);
@@ -89,9 +89,10 @@ export default function HomeScreen() {
     { label: 'Korean', value: 'ko', nativeLabel: '한국어' },
   ];
 
-  
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+    let interactionTask: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+    const restoreLocalState = async () => {
       try {
         const [cacheStr, mapStr, done, stored, storedRegion, timestamp] = await Promise.all([
           AsyncStorage.getItem(TRENDING_TRACKS_CACHE_KEY),
@@ -101,31 +102,79 @@ export default function HomeScreen() {
           AsyncStorage.getItem(REGION_OVERRIDE_KEY),
           AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY),
         ]);
-        if (cacheStr) setTrendingCache(JSON.parse(cacheStr));
-        if (mapStr) setRegionUrlMap(JSON.parse(mapStr));
-        if (!done) setShowFirstRunSetup(true);
+        if (!mounted) return;
+        if (cacheStr) {
+          try {
+            const parsed = JSON.parse(cacheStr) as Record<string, Track>;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) setTrendingCache(parsed);
+          } catch (error) {
+            console.warn('[Home] invalid trending cache ignored:', error);
+          }
+        }
+        if (mapStr) {
+          try {
+            const parsed = JSON.parse(mapStr) as Record<string, string>;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) setRegionUrlMap(parsed);
+          } catch (error) {
+            console.warn('[Home] invalid region cache ignored:', error);
+          }
+        }
+        if (!done) {
+          // Wait for the navigation transition to finish before presenting a
+          // native Modal. This prevents the first-run controls from appearing
+          // mounted but non-interactive on a fresh iOS launch.
+          interactionTask = InteractionManager.runAfterInteractions(() => {
+            if (!mounted) return;
+            setSetupModalReady(true);
+            setShowFirstRunSetup(true);
+          });
+        }
         if (stored !== null) setTrendingEnabled(stored === 'true');
         if (storedRegion && storedRegion.trim()) setRegionOverride(storedRegion);
-
-        const isStale = !timestamp || Date.now() - parseInt(timestamp, 10) > REGION_CACHE_TTL_MS;
-        if (isStale) {
-          const res = await fetch(KWORD_URL);
-          const html = await res.text();
-          const freshMap: Record<string, string> = {};
-          const regex = /<tr><td class="mp text">([^<]+)<\/td>\s*<td class="mp text">[\s\S]*?<a href="([^"]+)">Weekly<\/a>/g;
-          let match;
-          while ((match = regex.exec(html)) !== null) {
-            const name = match[1].trim();
-            freshMap[name] = `https://kworb.net/spotify/${match[2]}`;
-          }
-          setRegionUrlMap(freshMap);
-          await AsyncStorage.setItem(REGION_URL_MAP_KEY, JSON.stringify(freshMap));
-          await AsyncStorage.setItem(REGION_URL_MAP_TIMESTAMP_KEY, Date.now().toString());
-        }
       } catch (e) {
-        console.error('Failed to load cached data:', e);
+        console.error('[Home] failed to restore local state:', e);
+        if (mounted) {
+          interactionTask = InteractionManager.runAfterInteractions(() => {
+            if (!mounted) return;
+            setSetupModalReady(true);
+            setShowFirstRunSetup(true);
+          });
+        }
       }
-    })();
+    };
+    void restoreLocalState();
+    return () => {
+      mounted = false;
+      interactionTask?.cancel();
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const refreshRegionMap = async () => {
+      try {
+        const timestamp = await AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY);
+        const parsedTimestamp = timestamp ? Number.parseInt(timestamp, 10) : 0;
+        if (parsedTimestamp > 0 && Date.now() - parsedTimestamp <= REGION_CACHE_TTL_MS) return;
+        const res = await fetch(KWORD_URL);
+        if (!res.ok) throw new Error(`Region source returned HTTP ${res.status}`);
+        const html = await res.text();
+        const freshMap: Record<string, string> = {};
+        const regex = /<tr><td class="mp text">([^<]+)<\/td>\s*<td class="mp text">[\s\S]*?<a href="([^"]+)">Weekly<\/a>/g;
+        let match;
+        while ((match = regex.exec(html)) !== null) {
+          freshMap[match[1].trim()] = `https://kworb.net/spotify/${match[2]}`;
+        }
+        if (!mounted || Object.keys(freshMap).length === 0) return;
+        setRegionUrlMap(freshMap);
+        await AsyncStorage.setItem(REGION_URL_MAP_KEY, JSON.stringify(freshMap));
+        await AsyncStorage.setItem(REGION_URL_MAP_TIMESTAMP_KEY, Date.now().toString());
+      } catch (error) {
+        console.warn('[Home] region refresh unavailable; cached/auto mode remains active:', error);
+      }
+    };
+    void refreshRegionMap();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -325,13 +374,18 @@ export default function HomeScreen() {
   const saveFirstRunSetup = async () => {
     setIsSavingSetup(true);
     try {
-      await AsyncStorage.setItem(REGION_OVERRIDE_KEY, setupRegion);
-      await AsyncStorage.setItem(LANGUAGE_KEY, setupLanguage);
-      await AsyncStorage.setItem(FIRST_RUN_SETUP_KEY, '1');
-      await i18n.changeLanguage(setupLanguage);
+      await Promise.all([
+        AsyncStorage.setItem(REGION_OVERRIDE_KEY, setupRegion),
+        AsyncStorage.setItem(LANGUAGE_KEY, setupLanguage),
+        AsyncStorage.setItem(FIRST_RUN_SETUP_KEY, '1'),
+      ]);
       setMode(setupTheme);
       setRegionOverride(setupRegion);
+      setSetupPicker(null);
       setShowFirstRunSetup(false);
+      // Applying local preferences is intentionally after dismissing setup;
+      // a slow i18n listener must not make the Continue button look stuck.
+      await i18n.changeLanguage(setupLanguage);
     } catch (error) {
       console.error('Failed to save first run setup:', error);
     } finally {
@@ -458,152 +512,115 @@ export default function HomeScreen() {
           <></>
         )}
       </View>
-      <Modal visible={showFirstRunSetup} transparent animationType="fade">
+      <Modal
+        visible={showFirstRunSetup && setupModalReady}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSetupPicker(null)}
+      >
         <View style={styles.setupOverlay}>
-          <View style={[styles.setupCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[styles.setupTitle, { color: theme.textPrimary }]}>{t('home.welcome_title')}</Text>
-            <Text style={[styles.setupSubtitle, { color: theme.textSecondary }]}>
-              {t('home.welcome_subtitle')}
-            </Text>
+          {setupPicker === null ? (
+            <View style={[styles.setupCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Text style={[styles.setupTitle, { color: theme.textPrimary }]}>{t('home.welcome_title')}</Text>
+              <Text style={[styles.setupSubtitle, { color: theme.textSecondary }]}>{t('home.welcome_subtitle')}</Text>
 
-            <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.region')}</Text>
-            <TouchableOpacity
-              style={[styles.setupDropdownButton, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
-              onPress={() => setIsRegionModalOpen(true)}
-            >
-              <Text style={[styles.setupDropdownButtonText, { color: theme.textPrimary }]}>
-                {setupRegion === 'auto' ? t('settings.auto') : setupRegion}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
-            </TouchableOpacity>
+              <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.region')}</Text>
+              <TouchableOpacity
+                style={[styles.setupDropdownButton, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+                onPress={() => setSetupPicker('region')}
+                disabled={isSavingSetup}
+              >
+                <Text style={[styles.setupDropdownButtonText, { color: theme.textPrimary }]}>
+                  {setupRegion === 'auto' ? t('settings.auto') : setupRegion}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
+              </TouchableOpacity>
 
-            <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.language')}</Text>
-            <TouchableOpacity
-              style={[styles.setupDropdownButton, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
-              onPress={() => setIsLanguageModalOpen(true)}
-            >
-              <Text style={[styles.setupDropdownButtonText, { color: theme.textPrimary }]}>
-                {languageOptions.find((option) => option.value === setupLanguage)?.label || 'English'}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
-            </TouchableOpacity>
+              <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.language')}</Text>
+              <TouchableOpacity
+                style={[styles.setupDropdownButton, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}
+                onPress={() => setSetupPicker('language')}
+                disabled={isSavingSetup}
+              >
+                <Text style={[styles.setupDropdownButtonText, { color: theme.textPrimary }]}>
+                  {languageOptions.find((option) => option.value === setupLanguage)?.label || 'English'}
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
+              </TouchableOpacity>
 
-            <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.theme')}</Text>
-            <View style={styles.setupRow}>
-              {[
-                { label: t('components.theme_light'), value: 'light' as ThemeMode },
-                { label: t('components.theme_dark'), value: 'dark' as ThemeMode },
-                { label: t('components.theme_auto'), value: 'auto' as ThemeMode },
-              ].map((themeOption) => {
-                const active = setupTheme === themeOption.value;
-                return (
-                  <TouchableOpacity
-                    key={`setup-theme-${themeOption.value}`}
-                    style={[
-                      styles.setupSegment,
-                      { borderColor: theme.border, backgroundColor: theme.surfaceElevated },
-                      active && { backgroundColor: theme.accent, borderColor: theme.accent },
-                    ]}
-                    onPress={() => setSetupTheme(themeOption.value)}
-                  >
-                    <Text style={[styles.setupSegmentText, { color: active ? '#fff' : theme.textSecondary }]}>{themeOption.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+              <Text style={[styles.setupSectionTitle, { color: theme.textPrimary }]}>{t('settings.theme')}</Text>
+              <View style={styles.setupRow}>
+                {[
+                  { label: t('components.theme_light'), value: 'light' as ThemeMode },
+                  { label: t('components.theme_dark'), value: 'dark' as ThemeMode },
+                  { label: t('components.theme_auto'), value: 'auto' as ThemeMode },
+                ].map((themeOption) => {
+                  const active = setupTheme === themeOption.value;
+                  return (
+                    <TouchableOpacity
+                      key={`setup-theme-${themeOption.value}`}
+                      style={[
+                        styles.setupSegment,
+                        { borderColor: theme.border, backgroundColor: theme.surfaceElevated },
+                        active && { backgroundColor: theme.accent, borderColor: theme.accent },
+                      ]}
+                      onPress={() => setSetupTheme(themeOption.value)}
+                      disabled={isSavingSetup}
+                    >
+                      <Text style={[styles.setupSegmentText, { color: active ? '#fff' : theme.textSecondary }]}>{themeOption.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.setupContinueButton, { backgroundColor: theme.accent }]}
+                onPress={() => void saveFirstRunSetup()}
+                disabled={isSavingSetup}
+              >
+                {isSavingSetup ? <ActivityIndicator color="#fff" /> : <Text style={styles.setupContinueText}>{t('home.continue')}</Text>}
+              </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={[styles.setupContinueButton, { backgroundColor: theme.accent }]}
-              onPress={saveFirstRunSetup}
-              disabled={isSavingSetup}
-            >
-              {isSavingSetup ? <ActivityIndicator color="#fff" /> : <Text style={styles.setupContinueText}>{t('home.continue')}</Text>}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={isLanguageModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsLanguageModalOpen(false)}
-      >
-        <View style={styles.setupModalOverlay}>
-          <View style={[styles.setupLanguageModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[styles.setupSectionTitle, { color: theme.textPrimary, marginBottom: 12 }]}>{t('settings.language')}</Text>
-            <FlatList
-              data={languageOptions}
-              keyExtractor={(item) => item.value}
-              renderItem={({ item }) => {
-                const active = setupLanguage === item.value;
-                return (
-                  <TouchableOpacity
-                    style={[
-                      styles.setupLanguageOptionRow,
-                      { borderColor: theme.border, backgroundColor: theme.surfaceElevated },
-                      active && { borderColor: theme.accent },
-                    ]}
-                    onPress={() => {
-                      setSetupLanguage(item.value);
-                      setIsLanguageModalOpen(false);
-                    }}
-                  >
-                    <View>
-                      <Text style={[styles.setupLanguageOptionTitle, { color: theme.textPrimary }]}>{item.label}</Text>
-                      <Text style={[styles.setupLanguageOptionSubtitle, { color: theme.textSecondary }]}>{item.nativeLabel}</Text>
-                    </View>
-                    {active && <Ionicons name="checkmark-circle" size={18} color={theme.accent} />}
-                  </TouchableOpacity>
-                );
-              }}
-              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-            />
-            <TouchableOpacity style={styles.setupCancelButtonRow} onPress={() => setIsLanguageModalOpen(false)}>
-              <Text style={{ color: theme.textPrimary, fontSize: 15 }}>{t('common.close')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={isRegionModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsRegionModalOpen(false)}
-      >
-        <View style={styles.setupModalOverlay}>
-          <View style={[styles.setupLanguageModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[styles.setupSectionTitle, { color: theme.textPrimary, marginBottom: 12 }]}>{t('settings.region')}</Text>
-            <FlatList
-              data={['auto', ...Object.keys(regionUrlMap)]}
-              keyExtractor={(item) => item}
-              renderItem={({ item }) => {
-                const active = setupRegion === item;
-                const label = item === 'auto' ? t('settings.auto') : item;
-                return (
-                  <TouchableOpacity
-                    style={[
-                      styles.setupLanguageOptionRow,
-                      { borderColor: theme.border, backgroundColor: theme.surfaceElevated },
-                      active && { borderColor: theme.accent },
-                    ]}
-                    onPress={() => {
-                      setSetupRegion(item);
-                      setIsRegionModalOpen(false);
-                    }}
-                  >
-                    <Text style={[styles.setupLanguageOptionTitle, { color: theme.textPrimary }]}>{label}</Text>
-                    {active && <Ionicons name="checkmark-circle" size={18} color={theme.accent} />}
-                  </TouchableOpacity>
-                );
-              }}
-              ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-            />
-            <TouchableOpacity style={styles.setupCancelButtonRow} onPress={() => setIsRegionModalOpen(false)}>
-              <Text style={{ color: theme.textPrimary, fontSize: 15 }}>{t('common.close')}</Text>
-            </TouchableOpacity>
-          </View>
+          ) : (
+            <View style={[styles.setupLanguageModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <Text style={[styles.setupSectionTitle, { color: theme.textPrimary, marginBottom: 12 }]}>
+                {setupPicker === 'language' ? t('settings.language') : t('settings.region')}
+              </Text>
+              <FlatList
+                data={setupPicker === 'language' ? languageOptions : ['auto', ...Object.keys(regionUrlMap)]}
+                keyExtractor={(item) => typeof item === 'string' ? item : item.value}
+                renderItem={({ item }) => {
+                  const value = typeof item === 'string' ? item : item.value;
+                  const active = setupPicker === 'language' ? setupLanguage === value : setupRegion === value;
+                  const label = typeof item === 'string' ? (item === 'auto' ? t('settings.auto') : item) : item.label;
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.setupLanguageOptionRow,
+                        { borderColor: theme.border, backgroundColor: theme.surfaceElevated },
+                        active && { borderColor: theme.accent },
+                      ]}
+                      onPress={() => {
+                        if (setupPicker === 'language') setSetupLanguage(value);
+                        else setSetupRegion(value);
+                        setSetupPicker(null);
+                      }}
+                    >
+                      <View>
+                        <Text style={[styles.setupLanguageOptionTitle, { color: theme.textPrimary }]}>{label}</Text>
+                        {typeof item !== 'string' && <Text style={[styles.setupLanguageOptionSubtitle, { color: theme.textSecondary }]}>{item.nativeLabel}</Text>}
+                      </View>
+                      {active && <Ionicons name="checkmark-circle" size={18} color={theme.accent} />}
+                    </TouchableOpacity>
+                  );
+                }}
+                ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+              />
+              <TouchableOpacity style={styles.setupCancelButtonRow} onPress={() => setSetupPicker(null)}>
+                <Text style={{ color: theme.textPrimary, fontSize: 15 }}>{t('common.close')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </Modal>
     </SafeAreaView>

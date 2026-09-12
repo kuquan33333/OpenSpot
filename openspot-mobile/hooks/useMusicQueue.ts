@@ -19,6 +19,7 @@ export function useMusicQueue() {
     isShuffled: false,
     originalTracks: [],
   });
+  const queueHydratedRef = useRef(false);
 
   
   const queueRef = useRef(queue);
@@ -57,6 +58,8 @@ export function useMusicQueue() {
         }
       } catch (error) {
         console.error('Failed to restore queue:', error);
+      } finally {
+        queueHydratedRef.current = true;
       }
     };
     loadQueue();
@@ -65,6 +68,7 @@ export function useMusicQueue() {
   useEffect(() => {
     const saveQueue = async () => {
       try {
+        if (!queueHydratedRef.current) return;
         if (queue.tracks.length > 0) {
           await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
         } else {
