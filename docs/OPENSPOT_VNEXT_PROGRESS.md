@@ -36,9 +36,14 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 
 - extension_manager.go matches the staged SpotiFLAC-Mobile source exactly after normalizing line endings; no extsions/extsionsDir typo remains.
 - Go gofmt, vet and test ./... -count=1 pass, including the new cmd/extension-core-host package.
-- Rust cargo check --locked and rustfmt --edition 2021 --check src/lib.rs pass with the target-named Windows sidecar present.
+- Rust cargo check --locked and rustfmt --edition 2021 --check src/lib.rs passed in the prior sidecar smoke environment; the current Windows checkout intentionally does not track the generated target-named sidecar, so a local Tauri package check still requires the documented Go sidecar build step.
 - Sidecar smoke test passes JSON request/response and creates a persistent 32-byte storage key.
 - Locale/config JSON checks and git diff --check pass. TypeScript dependency installation remains unavailable locally because the npm registry response is not cached; no GitHub Action was spent for that check.
+- The iOS crash reports supplied from build 37 all terminate in `com.facebook.react.ExceptionsManagerQueue` with `EXC_CRASH/SIGABRT`; the matching raw JSX whitespace nodes were removed from Mix and both Library branches, and the mobile whitespace guard passes.
+- Mobile Extension Core host paths now convert Expo `file://` URIs to native filesystem paths before Go initialization, repository downloads, package loading and cleanup. Provider adapters are re-synced after the native core is initialized or an extension changes state.
+- Saavn requests now use the configured endpoint with the standard JioSaavn endpoint as a fallback, proxy all operations including `song.getDetails`, and preserve actionable network errors. A live probe returned valid search and song-detail payloads through the proxy.
+- Mobile Extension tabs now use a two-column wrapped layout on narrow screens, and Settings Extension/Mix action buttons have a non-shrinking inline layout so their labels and chevrons remain visible.
+- Search and stream resolution caches on mobile and desktop now use five-minute TTLs and evict rejected promises, preventing stale provider failures from being retained indefinitely.
 
 ## SpotiFLAC Extension Core
 
