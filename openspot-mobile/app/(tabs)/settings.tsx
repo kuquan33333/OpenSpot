@@ -425,7 +425,7 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.secondaryButton, { borderColor: theme.border }]}
+              style={[styles.secondaryButton, styles.inlineOpenButton, { borderColor: theme.border }]}
               onPress={() => router.push('/extensions')}
             >
               <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>
@@ -456,7 +456,7 @@ export default function SettingsScreen() {
               <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>{t('settings.mix', { defaultValue: 'Mix' })}</Text>
               <Text style={[styles.cardText, { color: theme.textSecondary }]}>{t('settings.mix_description', { defaultValue: 'Configure Crossfade, AutoMix, DJ filters and harmonic matching.' })}</Text>
             </View>
-            <TouchableOpacity style={[styles.secondaryButton, { borderColor: theme.border }]} onPress={() => router.push('/mix')}>
+            <TouchableOpacity style={[styles.secondaryButton, styles.inlineOpenButton, { borderColor: theme.border }]} onPress={() => router.push('/mix')}>
               <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>{t('common.open', { defaultValue: 'Open' })}</Text>
               <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
             </TouchableOpacity>
@@ -869,6 +869,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 40,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
+    flexShrink: 0,
+  },
+  inlineOpenButton: {
+    marginTop: 0,
   },
   secondaryButtonText: {
     fontSize: 14,

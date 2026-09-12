@@ -18,6 +18,7 @@ import * as FileSystem from 'expo-file-system';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
 import { fileUriToPath, pathToFileUri } from '@/lib/extensions/file-system-paths';
+import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
 import type { ExtensionHealthResult, InstalledExtension, RepositoryExtension } from '@/lib/extensions/extension-types';
 
 type ExtensionPage = 'store' | 'installed' | 'priority' | 'fallback';
@@ -97,6 +98,7 @@ export default function ExtensionsScreen() {
     setInstalled(items);
     setPriority(configuredPriority);
     setFallback(configuredFallback);
+    await syncExtensionProviders();
   }, [text]);
 
   const loadRepository = useCallback(async (forceRefresh = false) => {
@@ -428,9 +430,9 @@ export default function ExtensionsScreen() {
         <View style={styles.flexOne}><Text style={[styles.title, { color: theme.text }]}>{text('extensions.title', 'Extensions')}</Text><Text style={[styles.meta, { color: theme.secondary }]}>{pageTitle}</Text></View>
         <Pressable onPress={() => void refresh()} disabled={busy}><Ionicons name="refresh" size={22} color={busy ? theme.border : theme.accent} /></Pressable>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pageTabs}>
+      <View style={styles.pageTabs}>
         {([['installed', text('extensions.installed', 'Installed')], ['store', text('extensions.store', 'Store')], ['priority', text('extensions.priority', 'Priority')], ['fallback', text('extensions.fallback', 'Fallback')]] as const).map(([value, label]) => <Pressable key={value} onPress={() => void selectPage(value)} style={[styles.pageTab, { borderColor: theme.border }, page === value && { backgroundColor: theme.accent, borderColor: theme.accent }]}><Text style={[styles.pageTabText, { color: page === value ? '#fff' : theme.secondary }]}>{label}</Text></Pressable>)}
-      </ScrollView>
+      </View>
       {error && <View style={[styles.errorBanner, { backgroundColor: isDark ? '#32191b' : '#f7dedd', borderColor: '#d64a4a' }]}><Ionicons name="alert-circle-outline" size={18} color="#d64a4a" /><Text style={styles.errorBannerText}>{error}</Text></View>}
       {busy && installed.length === 0 && <ActivityIndicator color={theme.accent} style={styles.loader} />}
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -452,8 +454,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 8, gap: 10 },
   backButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 27, fontWeight: '800' },
-  pageTabs: { paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
-  pageTab: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 9 },
+  pageTabs: { paddingHorizontal: 16, paddingVertical: 8, gap: 8, flexDirection: 'row', flexWrap: 'wrap' },
+  pageTab: { flexGrow: 1, flexBasis: '45%', alignItems: 'center', borderWidth: 1, borderRadius: 18, paddingHorizontal: 10, paddingVertical: 9 },
   pageTabText: { fontSize: 13, fontWeight: '700' },
   content: { padding: 16, paddingBottom: 48 },
   listGap: { gap: 12 },

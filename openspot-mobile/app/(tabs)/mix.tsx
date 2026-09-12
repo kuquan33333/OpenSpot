@@ -95,7 +95,7 @@ export default function MixScreen() {
 }
 
 function SettingRow({ label, hint, value, onChange, theme, disabled = false }: { label: string; hint: string; value: boolean; onChange: (value: boolean) => void; theme: Record<string, string>; disabled?: boolean }) {
-  return <View style={[styles.settingRow, { borderTopColor: theme.border, opacity: disabled ? 0.45 : 1 }]}><View style={{ flex: 1, paddingRight: 12 }}><Text style={{ color: theme.text, fontWeight: '700' }}>{label}</Text><Text style={{ color: theme.secondary, fontSize: 12, marginTop: 3 }}>{hint}</Text></View><Switch value={value} onValueChange={onChange} disabled={disabled} trackColor={{ false: theme.border, true: theme.accent }} /> </View>;
+  return <View style={[styles.settingRow, { borderTopColor: theme.border, opacity: disabled ? 0.45 : 1 }]}><View style={{ flex: 1, paddingRight: 12 }}><Text style={{ color: theme.text, fontWeight: '700' }}>{label}</Text><Text style={{ color: theme.secondary, fontSize: 12, marginTop: 3 }}>{hint}</Text></View><Switch value={value} onValueChange={onChange} disabled={disabled} trackColor={{ false: theme.border, true: theme.accent }} /></View>;
 }
 
 function TrackPair({ track, label, meta, theme }: { track: Track | null; label: string; meta: string; theme: Record<string, string> }) {

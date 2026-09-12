@@ -4,10 +4,41 @@ import { ProviderRegistry, type ProviderId } from './providers/provider-registry
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export class MusicAPI {
-  private static searchCache = new Map<string, Promise<SearchResponse>>();
-  private static streamCache = new Map<string, Promise<string>>();
+  private static readonly searchCacheTtlMs = 5 * 60 * 1000;
+  private static readonly streamCacheTtlMs = 5 * 60 * 1000;
+  private static searchCache = new Map<string, { expiresAt: number; promise: Promise<SearchResponse> }>();
+  private static streamCache = new Map<string, { expiresAt: number; promise: Promise<string> }>();
   private static recentlyPlayedStorageKey = 'openspot_recently_played_tracks_v1';
   private static recentlyPlayedLimit = 30;
+
+  private static cache<T>(
+    cache: Map<string, { expiresAt: number; promise: Promise<T> }>,
+    key: string,
+    ttlMs: number,
+    loader: () => Promise<T>,
+  ): Promise<T> {
+    const existing = cache.get(key);
+    if (existing && existing.expiresAt > Date.now()) return existing.promise;
+    if (existing) cache.delete(key);
+
+    let promise: Promise<T>;
+    promise = loader().catch((error) => {
+      if (cache.get(key)?.promise === promise) cache.delete(key);
+      throw error;
+    });
+    cache.set(key, { expiresAt: Date.now() + ttlMs, promise });
+    return promise;
+  }
+
+  private static searchKey(params: SearchParams): string {
+    return JSON.stringify(params);
+  }
+
+  private static streamKey(trackId: string, trackOrProvider?: Track | ProviderId): string {
+    if (typeof trackOrProvider === 'string') return `provider:${trackOrProvider}:${trackId}`;
+    if (trackOrProvider) return `track:${trackOrProvider.provider || 'unknown'}:${trackOrProvider.id}`;
+    return `auto:${trackId}`;
+  }
 
   private static resolveProviderHint(trackOrProvider?: Track | ProviderId): ProviderId | null {
     if (!trackOrProvider) return null;
@@ -16,40 +47,44 @@ export class MusicAPI {
   }
 
   static async search(params: SearchParams): Promise<SearchResponse> {
-    return ProviderRegistry.search(params);
+    return this.cache(this.searchCache, this.searchKey(params), this.searchCacheTtlMs, () => ProviderRegistry.search(params));
   }
 
   static async searchTracks(query: string, offset: number = 0, limit: number = 20): Promise<SearchResponse> {
-    return ProviderRegistry.searchTracks(query, offset, limit);
+    const key = JSON.stringify(['tracks', query, offset, limit]);
+    return this.cache(this.searchCache, key, this.searchCacheTtlMs, () => ProviderRegistry.searchTracks(query, offset, limit));
   }
 
   static async getStreamUrl(trackId: string, trackOrProvider?: Track | ProviderId): Promise<string> {
     if (trackOrProvider && typeof trackOrProvider !== 'string') {
-      const result = await ProviderRegistry.resolveStream(trackOrProvider);
-      return result.url;
+      const key = this.streamKey(trackId, trackOrProvider);
+      return this.cache(this.streamCache, key, this.streamCacheTtlMs, async () => (await ProviderRegistry.resolveStream(trackOrProvider)).url);
     }
 
     const providerHint = this.resolveProviderHint(trackOrProvider);
-    if (providerHint) {
-      const provider = ProviderRegistry.get(providerHint);
-      if (provider?.capabilities.has('stream')) {
-        return provider.getStreamUrl(trackId);
+    const key = this.streamKey(trackId, trackOrProvider);
+    return this.cache(this.streamCache, key, this.streamCacheTtlMs, async () => {
+      if (providerHint) {
+        const provider = ProviderRegistry.get(providerHint);
+        if (provider?.capabilities.has('stream')) {
+          return provider.getStreamUrl(trackId);
+        }
       }
-    }
 
-    const priority = await ProviderRegistry.getPriority();
-    let lastError: unknown = null;
-    for (const providerId of priority) {
-      const provider = ProviderRegistry.get(providerId);
-      if (!provider?.capabilities.has('stream')) continue;
-      try {
-        return await provider.getStreamUrl(trackId);
-      } catch (error) {
-        lastError = error;
+      const priority = await ProviderRegistry.getPriority();
+      let lastError: unknown = null;
+      for (const providerId of priority) {
+        const provider = ProviderRegistry.get(providerId);
+        if (!provider?.capabilities.has('stream')) continue;
+        try {
+          return await provider.getStreamUrl(trackId);
+        } catch (error) {
+          lastError = error;
+        }
       }
-    }
 
-    throw lastError instanceof Error ? lastError : new Error('No stream provider is currently available');
+      throw lastError instanceof Error ? lastError : new Error('No stream provider is currently available');
+    });
   }
 
   static async getDownloadUrl(trackId: string, trackOrProvider?: Track | ProviderId): Promise<string> {

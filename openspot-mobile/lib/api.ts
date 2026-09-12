@@ -1,14 +1,12 @@
-import axios, { isAxiosError } from 'axios';
 import CryptoJS from 'crypto-js';
 import { SearchResponse, SearchParams, Track, Album, Artist, PlaylistSearchItem } from '../types/music';
 
-const getJioSaavnApiUrl = (): string => {
-  const value = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
-  if (!value) {
-    throw new Error('EXPO_PUBLIC_API_BASE_URL is not configured');
-  }
-  return value;
-};
+const DEFAULT_JIOSAAVN_API_URL = 'https://www.jiosaavn.com/api.php';
+
+function getJioSaavnApiUrls(): string[] {
+  const configured = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  return [...new Set([configured, DEFAULT_JIOSAAVN_API_URL].filter((value): value is string => Boolean(value)))];
+}
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -19,8 +17,8 @@ const USER_AGENTS = [
 
 const getRandomUserAgent = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
-const buildApiUrl = (endpoint: string, params: Record<string, string | number> = {}) => {
-  const url = new URL(getJioSaavnApiUrl());
+const buildApiUrl = (baseUrl: string, endpoint: string, params: Record<string, string | number> = {}) => {
+  const url = new URL(baseUrl);
   url.searchParams.append('__call', endpoint);
   url.searchParams.append('_format', 'json');
   url.searchParams.append('_marker', '0');
@@ -40,43 +38,69 @@ const buildApiUrl = (endpoint: string, params: Record<string, string | number> =
 
 const PROXY_URL = 'https://nextjs-proxy-gamma.vercel.app/api/proxy';
 
-const NON_PROXIED_ENDPOINTS = ['song.getDetails'];
-
-const fetchJioSaavn = async (endpoint: string, params: Record<string, string | number> = {}, timeoutMs = 15000) => {
-  const url = buildApiUrl(endpoint, params);
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    if (NON_PROXIED_ENDPOINTS.includes(endpoint)) {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': getRandomUserAgent() },
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      return res.json();
-    }
-    const res = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url,
-        method: 'GET',
-        headers: {
-          'User-Agent': getRandomUserAgent(),
-        },
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    const data = await res.json();
-    if (!data.body) {
-      throw new Error(`Proxy returned no body (${data.status || res.status})`);
-    }
-    return JSON.parse(data.body);
+    return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
-};
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+async function fetchJioSaavn(endpoint: string, params: Record<string, string | number> = {}, timeoutMs = 15000) {
+  let lastError: unknown = null;
+
+  for (const baseUrl of getJioSaavnApiUrls()) {
+    let url: string;
+    try {
+      url = buildApiUrl(baseUrl, endpoint, params);
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+
+    try {
+      const response = await fetchWithTimeout(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          method: 'GET',
+          headers: { 'User-Agent': getRandomUserAgent() },
+        }),
+      }, timeoutMs);
+      if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
+      const envelope = await response.json() as { body?: string | Record<string, unknown>; status?: number };
+      if (!envelope.body) throw new Error(`Proxy returned no body (${envelope.status || response.status})`);
+      return typeof envelope.body === 'string' ? JSON.parse(envelope.body) : envelope.body;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  // Keep a direct fallback for networks where the proxy is unavailable. This
+  // also covers song details, which used to bypass the proxy and fail on iOS.
+  for (const baseUrl of getJioSaavnApiUrls()) {
+    try {
+      const url = buildApiUrl(baseUrl, endpoint, params);
+      const response = await fetchWithTimeout(url, {
+        headers: { 'User-Agent': getRandomUserAgent() },
+      }, timeoutMs);
+      if (!response.ok) throw new Error(`JioSaavn HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(`JioSaavn ${endpoint} failed: ${errorMessage(lastError)}`);
+}
 
 export const createDownloadLinks = (encryptedMediaUrl: string) => {
   if (!encryptedMediaUrl) return [];
@@ -203,7 +227,7 @@ export class MusicApi {
       return songs.map((item: any) => this.transformSongToTrack(item));
     } catch (error) {
       console.error('Api album songs error:', error);
-      throw new Error(`MusicApi album songs failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi album songs failed: ${errorMessage(error)}`);
     }
   }
 
@@ -222,7 +246,7 @@ export class MusicApi {
       };
     } catch (error) {
       console.error('Api artist songs error:', error);
-      throw new Error(`MusicApi artist songs failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi artist songs failed: ${errorMessage(error)}`);
     }
   }
 
@@ -233,7 +257,7 @@ export class MusicApi {
       return songs.map((item: any) => this.transformSongToTrack(item));
     } catch (error) {
       console.error('Api playlist songs error:', error);
-      throw new Error(`MusicApi playlist songs failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi playlist songs failed: ${errorMessage(error)}`);
     }
   }
 
@@ -265,7 +289,7 @@ export class MusicApi {
         const all = await this.getPlaylistSongs(playlistId);
         return { tracks: all, total: all.length };
       }
-      throw new Error(`MusicApi playlist songs failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi playlist songs failed: ${errorMessage(error)}`);
     }
   }
 
@@ -359,7 +383,7 @@ export class MusicApi {
       return this.transformSearchResponse(data);
     } catch (error) {
       console.error('Api search error:', error);
-      throw new Error(`MusicApi search failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi search failed: ${errorMessage(error)}`);
     }
   }
 
@@ -373,7 +397,7 @@ export class MusicApi {
       return this.transformArtistSearchResponse(data);
     } catch (error) {
       console.error('Api artist search error:', error);
-      throw new Error(`MusicApi artist search failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi artist search failed: ${errorMessage(error)}`);
     }
   }
 
@@ -387,7 +411,7 @@ export class MusicApi {
       return this.transformPlaylistSearchResponse(data);
     } catch (error) {
       console.error('Api playlist search error:', error);
-      throw new Error(`MusicApi playlist search failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi playlist search failed: ${errorMessage(error)}`);
     }
   }
 
@@ -401,7 +425,7 @@ export class MusicApi {
       return this.transformAlbumSearchResponse(data);
     } catch (error) {
       console.error('Api album search error:', error);
-      throw new Error(`MusicApi album search failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi album search failed: ${errorMessage(error)}`);
     }
   }
 
@@ -431,7 +455,7 @@ export class MusicApi {
       return streamUrl;
     } catch (error) {
       console.error('MusicApi stream URL error:', error);
-      throw new Error(`MusicApi stream failed: ${isAxiosError(error) ? error.message : 'unknown'}`);
+      throw new Error(`MusicApi stream failed: ${errorMessage(error)}`);
     }
   }
 

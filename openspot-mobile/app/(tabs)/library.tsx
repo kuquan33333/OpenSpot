@@ -207,7 +207,7 @@ export default function LibraryScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.background} translucent={false} />
       {showLikedSongs ? (
-        <View style={[styles.scrollContent, { flex: 1 }]}> 
+        <View style={[styles.scrollContent, { flex: 1 }]}>
           <TouchableOpacity onPress={handleBackToLibrary} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color={theme.textPrimary} />
             <Text style={{ color: theme.textPrimary, fontSize: 16, marginLeft: 4 }}>{t('components.back_to_library')}</Text>
@@ -350,7 +350,7 @@ export default function LibraryScreen() {
           <View style={{ height: 120 }} />
         </ScrollView>
       ) : (
-        <View style={[styles.scrollContent, { flex: 1 }]}> 
+        <View style={[styles.scrollContent, { flex: 1 }]}>
           <TouchableOpacity onPress={handleBackToLibrary} style={styles.backButton}>
             <Ionicons name="chevron-back" size={22} color={theme.textPrimary} />
             <Text style={{ color: theme.textPrimary, fontSize: 16, marginLeft: 4 }}>{t('components.back_to_library')}</Text>
