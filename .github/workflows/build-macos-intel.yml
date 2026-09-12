@@ -26,6 +26,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: false
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
       - name: Install dependencies
@@ -44,6 +49,13 @@ jobs:
         run: |
           mkdir -p src-tauri/capabilities
           cat > src-tauri/capabilities/default.json <<< "$TAURI_DEFAULT_JSON_CONTENT"
+      - name: Build Extension Core sidecar
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/third_party/spotiflac-extension-core/upstream"
+          go mod download
+          mkdir -p "$GITHUB_WORKSPACE/openspot-desktop/src-tauri/binaries"
+          go build -o "$GITHUB_WORKSPACE/openspot-desktop/src-tauri/binaries/openspot-extension-core-host-x86_64-apple-darwin" ./cmd/extension-core-host
       - name: Build Tauri app (Intel)
         run: npm run tauri:build -- --target x86_64-apple-darwin
       - name: Upload DMG artifact

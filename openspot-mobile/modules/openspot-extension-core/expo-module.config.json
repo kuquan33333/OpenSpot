@@ -1,5 +1,8 @@
 {
-  "platforms": ["apple"],
+  "platforms": ["android", "apple"],
+  "android": {
+    "modules": ["com.openspot.extensioncore.OpenSpotExtensionCoreModule"]
+  },
   "apple": {
     "modules": ["OpenSpotExtensionCoreModule"]
   }

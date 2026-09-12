@@ -32,6 +32,12 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: false
+
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
 
@@ -54,6 +60,15 @@ jobs:
         run: |
           mkdir -p src-tauri/capabilities
           cat > src-tauri/capabilities/default.json <<< "$TAURI_DEFAULT_JSON_CONTENT"
+
+      - name: Build Extension Core sidecar
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/third_party/spotiflac-extension-core/upstream"
+          go mod download
+          mkdir -p "$GITHUB_WORKSPACE/openspot-desktop/src-tauri/binaries"
+          target="$(rustc -vV | grep host | cut -d" " -f2)"
+          go build -o "$GITHUB_WORKSPACE/openspot-desktop/src-tauri/binaries/openspot-extension-core-host-$target" ./cmd/extension-core-host
 
       - name: Build Tauri app
         run: npm run tauri:build

@@ -51,6 +51,23 @@ jobs:
       - name: Reinstall dependencies
         run: npm install
 
+      - name: Setup Go for Extension Core
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: false
+
+      - name: Build Extension Core Android AAR
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/third_party/spotiflac-extension-core/upstream"
+          go mod download
+          go install golang.org/x/mobile/cmd/gomobile
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          gomobile init
+          mkdir -p "$GITHUB_WORKSPACE/openspot-mobile/modules/openspot-extension-core/android/libs"
+          gomobile bind -target=android -tags android -o "$GITHUB_WORKSPACE/openspot-mobile/modules/openspot-extension-core/android/libs/Gobackend.aar" "$GITHUB_WORKSPACE/third_party/spotiflac-extension-core/upstream"
+
       - name: Create .env from secret
         run: printf '%s' '${{ secrets.DOT_ENV_CONTENT }}' > .env
 

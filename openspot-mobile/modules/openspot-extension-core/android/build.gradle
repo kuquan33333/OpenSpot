@@ -1,0 +1,25 @@
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+
+group = "com.openspot.extensioncore"
+version = "1.0.0"
+
+android {
+  namespace "com.openspot.extensioncore"
+  compileSdkVersion rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    minSdkVersion rootProject.ext.minSdkVersion
+    targetSdkVersion rootProject.ext.targetSdkVersion
+  }
+}
+
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  implementation project(":expo-modules-core")
+  implementation files("libs/Gobackend.aar")
+}
