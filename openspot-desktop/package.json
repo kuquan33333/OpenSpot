@@ -9,7 +9,8 @@
   "tauri:dev": "tauri dev",
   "tauri:build": "tauri build",
 "lint": "eslint .",
-"test:automix": "npx tsc --target ES2022 --module commonjs --moduleResolution node --outDir tmp/automix-test-build --skipLibCheck lib/automix/auto-mix-engine-regression.ts && node tmp/automix-test-build/automix/auto-mix-engine-regression.js"
+"test:automix": "npx tsc --target ES2022 --module commonjs --moduleResolution node --outDir tmp/automix-test-build --skipLibCheck lib/automix/auto-mix-engine-regression.ts && node tmp/automix-test-build/automix/auto-mix-engine-regression.js",
+"test:extensions": "npx tsc --target ES2022 --module commonjs --moduleResolution node --outDir tmp/extension-test-build --skipLibCheck lib/extensions/extension-core-response-regression.ts && node tmp/extension-test-build/extension-core-response-regression.js"
 },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",

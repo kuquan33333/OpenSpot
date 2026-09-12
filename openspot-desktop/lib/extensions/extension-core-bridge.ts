@@ -10,6 +10,7 @@ import type {
   InstalledExtension,
   RepositoryExtension,
 } from './extension-types';
+import { decodeExtensionCoreResponse } from './extension-core-response';
 
 export class ExtensionCoreUnavailableError extends Error {
   constructor(message = 'Extension Core Tauri bridge is unavailable') {
@@ -18,33 +19,10 @@ export class ExtensionCoreUnavailableError extends Error {
   }
 }
 
-const RAW_STRING_OPERATIONS = new Set([
-  'GetRepoRegistryURLJSON',
-  'DownloadRepoExtensionJSON',
-]);
-
-function decodeCoreResponse<T>(operation: string, response: unknown): T {
-  if (typeof response !== 'string') return response as T;
-
-  const payload = response.trim();
-  if (RAW_STRING_OPERATIONS.has(operation)) {
-    if (!payload) return response as T;
-    try {
-      const decoded = JSON.parse(payload) as unknown;
-      return (typeof decoded === 'string' ? decoded : response) as T;
-    } catch {
-      // Keep compatibility with native hosts that return raw URL/path strings.
-      return response as T;
-    }
-  }
-
-  return JSON.parse(payload) as T;
-}
-
 async function callCore<T>(operation: string, payload: unknown[] = []): Promise<T> {
   if (!isTauriRuntime()) throw new ExtensionCoreUnavailableError();
   const response = await invoke<unknown>('extension_core_call', { operation, payload });
-  return decodeCoreResponse<T>(operation, response);
+  return decodeExtensionCoreResponse<T>(operation, response);
 }
 
 export const isExtensionCoreAvailable = (): boolean => isTauriRuntime();

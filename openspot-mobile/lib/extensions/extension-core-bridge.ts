@@ -9,6 +9,7 @@ import type {
   InstalledExtension,
   RepositoryExtension,
 } from './extension-types';
+import { decodeExtensionCoreResponse } from './extension-core-response';
 
 type NativeCall = (...args: unknown[]) => unknown;
 type NativeModuleShape = Record<string, NativeCall | undefined> & { call?: NativeCall };
@@ -45,29 +46,6 @@ function resolveMethod(name: string): NativeCall | null {
   return module[name] ?? module[methodName(name)] ?? null;
 }
 
-const RAW_STRING_OPERATIONS = new Set([
-  'GetRepoRegistryURLJSON',
-  'DownloadRepoExtensionJSON',
-]);
-
-function decodeJSON<T>(operation: string, value: unknown): T {
-  if (typeof value === 'string') {
-    const payload = value.trim();
-    if (RAW_STRING_OPERATIONS.has(operation)) {
-      if (!payload) return value as T;
-      try {
-        const decoded = JSON.parse(payload) as unknown;
-        return (typeof decoded === 'string' ? decoded : value) as T;
-      } catch {
-        // Older native builds returned URL/path strings without JSON quoting.
-        return value as T;
-      }
-    }
-    return JSON.parse(payload) as T;
-  }
-  return value as T;
-}
-
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
 }
@@ -76,11 +54,11 @@ async function callNative<T>(name: string, ...args: unknown[]): Promise<T> {
   const module = resolveNativeModule();
   const genericCall = module?.call;
   if (genericCall) {
-    return decodeJSON<T>(name, await Reflect.apply(genericCall, module, [name, JSON.stringify(args)]));
+    return decodeExtensionCoreResponse<T>(name, await Reflect.apply(genericCall, module, [name, JSON.stringify(args)]));
   }
   const method = resolveMethod(name);
   if (!method) throw new ExtensionCoreUnavailableError();
-  return decodeJSON<T>(name, await method(...args));
+  return decodeExtensionCoreResponse<T>(name, await method(...args));
 }
 
 export const isExtensionCoreAvailable = (): boolean => Boolean(resolveNativeModule());

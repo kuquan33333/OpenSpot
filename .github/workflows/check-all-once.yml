@@ -27,6 +27,8 @@ jobs:
         run: npx tsc --noEmit
       - name: AutoMix takeover regression
         run: npm run test:automix
+      - name: Extension bridge response regression
+        run: npm run test:extensions
 
   desktop-check:
     name: Desktop UI - lint and typecheck
@@ -47,6 +49,8 @@ jobs:
         run: npx tsc --noEmit
       - name: AutoMix takeover regression
         run: npm run test:automix
+      - name: Extension bridge response regression
+        run: npm run test:extensions
 
   extension-go-check:
     name: Extension Core - Go test
