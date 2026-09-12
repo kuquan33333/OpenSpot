@@ -9,8 +9,11 @@ Pod::Spec.new do |s|
   s.author = { 'OpenSpot' => 'todo996' }
   s.platforms = { :ios => '15.1' }
   s.source = { :path => '.' }
-  s.source_files = 'ios/**/*.{swift,h,m,mm}'
-  s.vendored_frameworks = 'ios/Frameworks/Gobackend.xcframework'
+  # The podspec lives inside the module's ios directory. Paths are resolved
+  # from this directory, so prefixing them with ios/ silently produced an
+  # empty pod target and left ExpoModulesProvider unable to import the module.
+  s.source_files = '*.{swift,h,m,mm}'
+  s.vendored_frameworks = 'Frameworks/Gobackend.xcframework'
   s.swift_version = '5.9'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.dependency 'ExpoModulesCore'
