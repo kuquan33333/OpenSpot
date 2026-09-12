@@ -79,6 +79,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: true
+          cache-dependency-path: third_party/spotiflac-extension-core/upstream/go.sum
+      - name: Build Extension Core sidecar for cargo metadata
+        working-directory: third_party/spotiflac-extension-core/upstream
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/openspot-desktop/src-tauri/binaries"
+          go build -o "$GITHUB_WORKSPACE/openspot-desktop/src-tauri/binaries/openspot-extension-core-host-x86_64-unknown-linux-gnu" ./cmd/extension-core-host
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
