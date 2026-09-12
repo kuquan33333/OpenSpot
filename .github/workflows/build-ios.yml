@@ -4,7 +4,83 @@ on:
   workflow_dispatch:
 
 jobs:
+  preflight:
+    name: Preflight checks before IPA
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache npm download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-preflight-npm-${{ hashFiles('openspot-mobile/package.json', 'openspot-desktop/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-preflight-npm-
+
+      - name: Mobile lint, typecheck and regressions
+        working-directory: openspot-mobile
+        run: |
+          npm install --no-audit --no-fund
+          npm run lint
+          npx tsc --noEmit
+          npm run test:automix
+          npm run test:extensions
+
+      - name: Desktop lint, typecheck and regressions
+        working-directory: openspot-desktop
+        run: |
+          npm ci --no-audit --no-fund
+          npm run lint
+          npx tsc --noEmit
+          npm run test:automix
+          npm run test:extensions
+
+      - name: Setup Go for Extension Core
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
+          cache: true
+          cache-dependency-path: third_party/spotiflac-extension-core/upstream/go.sum
+
+      - name: Go format, vet and test
+        working-directory: third_party/spotiflac-extension-core/upstream
+        run: |
+          go mod tidy
+          test -z "$(gofmt -l .)" || { echo 'Go files need gofmt:'; gofmt -l .; exit 1; }
+          go vet ./...
+          go test ./...
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Extension Core sidecar for Tauri check
+        working-directory: third_party/spotiflac-extension-core/upstream
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/openspot-desktop/src-tauri/binaries"
+          go build -o "$GITHUB_WORKSPACE/openspot-desktop/src-tauri/binaries/openspot-extension-core-host-x86_64-unknown-linux-gnu" ./cmd/extension-core-host
+
+      - name: Tauri format and typecheck
+        run: |
+          cargo fmt --manifest-path openspot-desktop/src-tauri/Cargo.toml -- --check
+          cargo check --locked --manifest-path openspot-desktop/src-tauri/Cargo.toml
+
   build:
+    needs: preflight
     # Use a fixed hosted image so a moving latest alias cannot block IPA builds.
     # Expo Modules Core 2.5 uses SwiftUI APIs introduced with Xcode 16.
     runs-on: macos-15
