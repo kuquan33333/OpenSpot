@@ -45,8 +45,26 @@ function resolveMethod(name: string): NativeCall | null {
   return module[name] ?? module[methodName(name)] ?? null;
 }
 
-function decodeJSON<T>(value: unknown): T {
-  if (typeof value === 'string') return JSON.parse(value) as T;
+const RAW_STRING_OPERATIONS = new Set([
+  'GetRepoRegistryURLJSON',
+  'DownloadRepoExtensionJSON',
+]);
+
+function decodeJSON<T>(operation: string, value: unknown): T {
+  if (typeof value === 'string') {
+    const payload = value.trim();
+    if (RAW_STRING_OPERATIONS.has(operation)) {
+      if (!payload) return value as T;
+      try {
+        const decoded = JSON.parse(payload) as unknown;
+        return (typeof decoded === 'string' ? decoded : value) as T;
+      } catch {
+        // Older native builds returned URL/path strings without JSON quoting.
+        return value as T;
+      }
+    }
+    return JSON.parse(payload) as T;
+  }
   return value as T;
 }
 
@@ -54,11 +72,11 @@ async function callNative<T>(name: string, ...args: unknown[]): Promise<T> {
   const module = resolveNativeModule();
   const genericCall = module?.call;
   if (genericCall) {
-    return decodeJSON<T>(await Reflect.apply(genericCall, module, [name, JSON.stringify(args)]));
+    return decodeJSON<T>(name, await Reflect.apply(genericCall, module, [name, JSON.stringify(args)]));
   }
   const method = resolveMethod(name);
   if (!method) throw new ExtensionCoreUnavailableError();
-  return decodeJSON<T>(await method(...args));
+  return decodeJSON<T>(name, await method(...args));
 }
 
 export const isExtensionCoreAvailable = (): boolean => Boolean(resolveNativeModule());

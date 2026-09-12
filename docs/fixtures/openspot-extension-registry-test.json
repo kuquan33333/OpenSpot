@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "updated_at": "2026-09-12T00:00:00Z",
+  "extensions": [
+    {
+      "id": "spotify-web",
+      "name": "spotify-web",
+      "display_name": "Spotify Web",
+      "version": "1.10.2",
+      "description": "OpenSpot registry compatibility test for the Spotify metadata extension.",
+      "download_url": "https://raw.githubusercontent.com/zarzet/SpotiFLAC-Extension/main/extensions/spotify-web.sflx",
+      "sha256": "26f4f8de8efae21d4668cac07e57e82965d796c36c9534ee6828c6efba67f81e",
+      "category": "integration",
+      "tags": [
+        "metadata",
+        "spotify",
+        "compatibility-test"
+      ],
+      "downloads": 0,
+      "updated_at": "2026-09-12T00:00:00Z",
+      "min_app_version": "4.2.3"
+    }
+  ]
+}

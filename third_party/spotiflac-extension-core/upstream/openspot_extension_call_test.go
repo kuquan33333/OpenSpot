@@ -39,3 +39,26 @@ func TestCallOpenSpotExtensionJSONValidatesPackageManagementArguments(t *testing
 		}
 	}
 }
+
+func TestCallOpenSpotExtensionJSONEncodesRepositoryURL(t *testing.T) {
+	if err := InitExtensionRepoJSON(t.TempDir()); err != nil {
+		t.Fatalf("init extension repo: %v", err)
+	}
+
+	repo := getExtensionRepo()
+	originalURL := repo.getRegistryURL()
+	t.Cleanup(func() { repo.setRegistryURL(originalURL) })
+
+	const registryURL = "https://raw.githubusercontent.com/example/OpenSpot/main/registry.json"
+	if err := SetRepoRegistryURLJSON(registryURL); err != nil {
+		t.Fatalf("set repository URL: %v", err)
+	}
+
+	result, err := CallOpenSpotExtensionJSON("GetRepoRegistryURLJSON", "[]")
+	if err != nil {
+		t.Fatalf("get repository URL: %v", err)
+	}
+	if result != `"https://raw.githubusercontent.com/example/OpenSpot/main/registry.json"` {
+		t.Fatalf("repository URL result = %q", result)
+	}
+}

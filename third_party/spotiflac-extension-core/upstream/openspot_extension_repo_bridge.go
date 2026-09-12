@@ -48,7 +48,7 @@ func GetRepoRegistryURLJSON() (string, error) {
 		return "", fmt.Errorf("extension repo not initialized")
 	}
 
-	return repo.getRegistryURL(), nil
+	return marshalExtensionJSON(repo.getRegistryURL())
 }
 
 func GetRepoExtensionsJSON(forceRefresh bool) (string, error) {
@@ -134,7 +134,7 @@ func DownloadRepoExtensionJSON(extensionID, destDir string) (string, error) {
 		return "", err
 	}
 
-	return destPath, nil
+	return marshalExtensionJSON(destPath)
 }
 
 func ClearRepoCacheJSON() error {
