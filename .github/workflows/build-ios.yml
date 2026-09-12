@@ -6,7 +6,8 @@ on:
 jobs:
   build:
     # Use a fixed hosted image so a moving latest alias cannot block IPA builds.
-    runs-on: macos-14
+    # Expo Modules Core 2.5 uses SwiftUI APIs introduced with Xcode 16.
+    runs-on: macos-15
     defaults:
       run:
         working-directory: openspot-mobile
@@ -28,10 +29,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Remove Expo Dev Tools & add missing deps
+      - name: Prepare iOS dependency manifest
         run: |
           node -e "
             const fs = require('fs');
@@ -49,16 +47,31 @@ jobs:
             });
             fs.writeFileSync('app.json', JSON.stringify(app, null, 2));
           "
-          rm -rf node_modules
 
-      - name: Reinstall dependencies
+      - name: Cache npm download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('openspot-mobile/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install dependencies
         run: npm install
+
+      - name: Select Xcode 16 toolchain
+        run: |
+          XCODE_PATH="$(ls -d /Applications/Xcode_16*.app 2>/dev/null | tail -1 || true)"
+          test -n "$XCODE_PATH"
+          sudo xcode-select --switch "$XCODE_PATH/Contents/Developer"
+          xcodebuild -version
 
       - name: Setup Go for Extension Core
         uses: actions/setup-go@v5
         with:
           go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
-          cache: false
+          cache: true
+          cache-dependency-path: third_party/spotiflac-extension-core/upstream/go.sum
 
       - name: Build Extension Core iOS framework
         run: |
@@ -84,17 +97,46 @@ jobs:
       - name: Prebuild iOS
         run: npx expo prebuild --platform ios --clean
 
+      - name: Restore CocoaPods cache
+        id: pods-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            openspot-mobile/ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('openspot-mobile/package.json', 'openspot-mobile/app.json', 'openspot-mobile/modules/**/*.podspec', 'openspot-mobile/modules/**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
       - name: Install Pods
         run: |
           cd ios
-          # Keep the generated project aligned with app.json. Xcode 26.6's
-          # C++20 compile-time checks reject the fmt pod in the new-arch path.
           export RCT_NEW_ARCH_ENABLED=0
-          pod install --repo-update
-          # Xcode 26.6 rejects fmt's compile-time format strings under C++20.
+          pod install
+          # Xcode rejects fmt's compile-time format strings under C++20.
           # Keep the workaround scoped to fmt; React Native targets retain
           # their generated language-standard settings.
           ruby -rxcodeproj -e 'project = Xcodeproj::Project.open("Pods/Pods.xcodeproj"); target = project.targets.find { |candidate| candidate.name == "fmt" }; abort "fmt target not found" unless target; target.build_configurations.each { |configuration| configuration.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++17" }; project.save'
+
+      - name: Save CocoaPods cache
+        if: always() && steps.pods-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            openspot-mobile/ios/Pods
+          key: ${{ steps.pods-cache.outputs.cache-primary-key }}
+
+      - name: Restore Xcode derived data cache
+        id: xcode-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: openspot-mobile/ios/build/DerivedData
+          key: ${{ runner.os }}-xcode-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-${{ github.ref_name }}-
+            ${{ runner.os }}-xcode-
 
       - name: Bundle JS (Hermes production)
         run: |
@@ -129,7 +171,16 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
             ONLY_ACTIVE_ARCH=NO \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO \
-            -jobs 1
+            -derivedDataPath build/DerivedData \
+            -jobs 3
+
+      - name: Save Xcode derived data cache
+        if: always() && steps.xcode-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: openspot-mobile/ios/build/DerivedData
+          key: ${{ steps.xcode-cache.outputs.cache-primary-key }}
 
       - name: Verify bundle inside app
         run: |
