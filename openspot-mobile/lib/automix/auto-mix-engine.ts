@@ -51,6 +51,7 @@ const delay = (ms: number, signal: AbortSignal): Promise<void> => new Promise((r
 });
 
 export class AutoMixEngine<T extends AutoMixTrack> {
+  private readonly options: AutoMixEngineOptions<T>;
   private settings: AutoMixSettings;
   private current: ActivePlayer<T> | null = null;
   private secondary: ActivePlayer<T> | null = null;
@@ -62,7 +63,8 @@ export class AutoMixEngine<T extends AutoMixTrack> {
   private state: AutoMixPlayerState = 'IDLE';
   private albumTrackIds = new Set<string>();
 
-  constructor(private readonly options: AutoMixEngineOptions<T>, settings: AutoMixSettings) {
+  constructor(options: AutoMixEngineOptions<T>, settings: AutoMixSettings) {
+    this.options = options;
     this.settings = settings;
   }
 
@@ -243,11 +245,23 @@ export class AutoMixEngine<T extends AutoMixTrack> {
       }
       await incoming.player.setVolume(1);
       await outgoing.player.setVolume(0);
-      await this.options.onTakeover?.({ track: next, player: incoming.player, plan });
-      await outgoing.player.stop().catch(() => {});
-      await outgoing.player.release().catch(() => {});
+      // Promote the already-playing player before notifying React. The queue
+      // index update can synchronously trigger the current-track effect; if
+      // `current` still points at the outgoing player, that effect disposes
+      // the incoming player and loads the song again from position zero.
       this.current = incoming;
       this.secondary = null;
+      this.emitDiagnostic({ type: 'automix_takeover_ready', trackId: next.id });
+      try {
+        await this.options.onTakeover?.({ track: next, player: incoming.player, plan });
+      } catch (error) {
+        // A UI notification must not invalidate the audio takeover that has
+        // already completed. Keep the promoted player alive and report the
+        // callback failure for diagnostics.
+        this.emitDiagnostic({ type: 'automix_takeover_callback_failed', trackId: next.id, detail: { error: String(error) } });
+      }
+      await outgoing.player.stop().catch(() => {});
+      await outgoing.player.release().catch(() => {});
       this.emitDiagnostic({ type: 'automix_finished', trackId: next.id });
       this.setState('PLAYING');
     } catch (error) {
