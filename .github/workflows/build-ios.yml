@@ -129,7 +129,6 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
             ONLY_ACTIVE_ARCH=NO \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO \
-            -parallelizeTargets NO \
             -jobs 1
 
       - name: Verify bundle inside app
