@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { DEFAULT_AUTO_MIX_SETTINGS } from './auto-mix-algorithms';
 import type { AutoMixSettings } from './auto-mix-types';
+import { parseStoredJSON } from '@/lib/storage-validation';
 
 export const AUTO_MIX_SETTINGS_KEY = 'openspot_automix_settings_v1';
 
@@ -31,7 +32,7 @@ function normalize(value: unknown): AutoMixSettings {
 export async function loadAutoMixSettings(): Promise<AutoMixSettings> {
   try {
     const raw = await AsyncStorage.getItem(AUTO_MIX_SETTINGS_KEY);
-    return raw ? normalize(JSON.parse(raw)) : DEFAULT_AUTO_MIX_SETTINGS;
+    return normalize(parseStoredJSON<unknown>(raw, AUTO_MIX_SETTINGS_KEY, DEFAULT_AUTO_MIX_SETTINGS));
   } catch { return DEFAULT_AUTO_MIX_SETTINGS; }
 }
 

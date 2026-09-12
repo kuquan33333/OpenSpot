@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { useThemeMode, ThemeMode } from '@/hooks/theme-mode';
 import { useConnectivity } from '@/hooks/useConnectivity';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { isRecord, parseStoredJSON } from '@/lib/storage-validation';
 
 const isTauri = () => {
   if (typeof window === 'undefined') return false;
@@ -126,8 +127,16 @@ export default function HomeScreen() {
           AsyncStorage.getItem(REGION_OVERRIDE_KEY),
           AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY),
         ]);
-        if (cacheStr) setTrendingCache(JSON.parse(cacheStr));
-        if (mapStr) setRegionUrlMap(JSON.parse(mapStr));
+        const cachedTracks = parseStoredJSON<unknown>(cacheStr, TRENDING_TRACKS_CACHE_KEY, null);
+        if (isRecord(cachedTracks)) setTrendingCache(cachedTracks as Record<string, Track>);
+        const cachedRegions = parseStoredJSON<unknown>(mapStr, REGION_URL_MAP_KEY, null);
+        if (isRecord(cachedRegions)) {
+          const validRegions: Record<string, string> = {};
+          for (const [region, url] of Object.entries(cachedRegions)) {
+            if (typeof url === 'string') validRegions[region] = url;
+          }
+          setRegionUrlMap(validRegions);
+        }
         if (!done) setShowFirstRunSetup(true);
         if (stored !== null) setTrendingEnabled(stored === 'true');
         if (storedRegion && storedRegion.trim()) setRegionOverride(storedRegion);

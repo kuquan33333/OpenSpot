@@ -22,6 +22,7 @@ import { useColorScheme } from '../hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
 import { ensureTrackPlayerReady, releaseTrackPlayer, withPlaybackRetry } from '@/lib/playback/track-player-runtime';
 import { getPlayableOfflineUri, isTauriRuntime } from '@/lib/tauri-offline';
+import { isRecord, parseStoredJSON } from '@/lib/storage-validation';
 import { useAutoMixPlayback } from '@/lib/automix/use-auto-mix-playback';
 
 async function resolveDesktopTrackUrl(t: Track): Promise<string> {
@@ -233,7 +234,8 @@ export function Player({
     try {
       const offlineData = await AsyncStorage.getItem(`offline_${t.id}`);
       if (offlineData) {
-        const { fileUri } = JSON.parse(offlineData);
+        const parsed = parseStoredJSON<unknown>(offlineData, `offline_${t.id}`, null);
+        const fileUri = isRecord(parsed) && typeof parsed.fileUri === 'string' ? parsed.fileUri : '';
         if (fileUri) {
           if (isTauriRuntime()) return getPlayableOfflineUri(fileUri, 'audio/mpeg');
           const info = await FileSystem.getInfoAsync(fileUri);
