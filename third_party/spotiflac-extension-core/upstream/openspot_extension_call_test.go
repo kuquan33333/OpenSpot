@@ -26,3 +26,16 @@ func TestCallOpenSpotExtensionJSONRejectsUnknownOperation(t *testing.T) {
 		t.Fatal("unknown operation unexpectedly succeeded")
 	}
 }
+
+func TestCallOpenSpotExtensionJSONValidatesPackageManagementArguments(t *testing.T) {
+	for _, operation := range []string{
+		"LoadExtensionFromPath",
+		"RemoveExtensionByID",
+		"UpgradeExtensionFromPath",
+		"CheckExtensionUpgradeFromPath",
+	} {
+		if _, err := CallOpenSpotExtensionJSON(operation, "[]"); err == nil {
+			t.Fatalf("%s unexpectedly accepted a missing path/id", operation)
+		}
+	}
+}

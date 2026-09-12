@@ -14,6 +14,10 @@ export interface InstalledExtension {
   error?: string;
   health?: ExtensionHealthStatus;
   capabilities?: string[];
+  permissions?: string[];
+  has_metadata_provider?: boolean;
+  has_download_provider?: boolean;
+  has_lyrics_provider?: boolean;
 }
 
 export interface RepositoryExtension {

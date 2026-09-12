@@ -1,7 +1,7 @@
 import type { Album, Artist, PlaylistSearchItem, SearchParams, SearchResponse, Track } from '@/types/music';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
 import type { InstalledExtension } from '@/lib/extensions/extension-types';
-import { ProviderRegistry, type ProviderAdapter } from './provider-registry';
+import { ProviderRegistry, type ProviderAdapter, type ProviderCapability } from './provider-registry';
 
 type LooseRecord = Record<string, unknown>;
 const stringValue = (record: LooseRecord, ...keys: string[]): string => {
@@ -69,10 +69,16 @@ function getUrl(raw: unknown): string {
 
 export function createExtensionProviderAdapter(extension: InstalledExtension): ProviderAdapter {
   const id = extension.id;
+  const types = new Set([...(extension.types ?? []), ...(extension.capabilities ?? [])]);
+  const supportsMetadata = extension.has_metadata_provider === true || types.has('metadata_provider');
+  const supportsDownload = extension.has_download_provider === true || types.has('download_provider');
+  const capabilities = new Set<ProviderCapability>();
+  if (supportsMetadata) capabilities.add('search').add('stream');
+  if (supportsMetadata || supportsDownload) capabilities.add('download');
   return {
     id,
     displayName: extension.display_name || extension.name || id,
-    capabilities: new Set(['search']),
+    capabilities,
     search: async (params: SearchParams) => params.type && params.type !== 'track' ? normalizeResponse([], id) : normalizeResponse(await extensionCoreBridge.searchMetadata(params.q, 20, true), id),
     searchTracks: async (query: string, _page = 1, limit = 20) => normalizeResponse(await extensionCoreBridge.searchMetadataProvider(id, query, limit), id),
     getStreamUrl: async (trackId: string) => {

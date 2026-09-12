@@ -344,6 +344,30 @@ func CallOpenSpotExtensionJSON(operation, payloadJSON string) (string, error) {
 			return "", callErr
 		}
 		return LoadExtensionsFromDir(value)
+	case "LoadExtensionFromPath":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return LoadExtensionFromPath(value)
+	case "RemoveExtensionByID":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return void(RemoveExtensionByID(value))
+	case "UpgradeExtensionFromPath":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return UpgradeExtensionFromPath(value)
+	case "CheckExtensionUpgradeFromPath":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		return CheckExtensionUpgradeFromPath(value)
 	case "GetInstalledExtensions":
 		return GetInstalledExtensions()
 	case "SetExtensionEnabledByID":

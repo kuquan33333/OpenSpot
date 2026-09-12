@@ -350,7 +350,7 @@ export default function LibraryScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={[styles.createButton, { backgroundColor: theme.surface, borderColor: theme.border }]} onPress={() => setShowImportModal(true)}>
             <Ionicons name="cloud-download" size={24} color={theme.accent} style={{ marginRight: 8 }} />
-            <Text style={[styles.createButtonText, { color: theme.accent }]}>Import from Spotify</Text>
+            <Text style={[styles.createButtonText, { color: theme.accent }]}>{t('library.import_title')}</Text>
           </TouchableOpacity>
           <View style={{ height: 120 }} />
         </ScrollView>
@@ -475,10 +475,10 @@ export default function LibraryScreen() {
       <Modal visible={showImportModal} transparent animationType="fade" onRequestClose={() => setShowImportModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Import from Spotify</Text>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>{t('library.import_title')}</Text>
             <TextInput
               style={[styles.input, { backgroundColor: theme.surfaceAlt, color: theme.textPrimary, borderColor: theme.border }]}
-              placeholder="Spotify playlist URL"
+              placeholder={t('library.spotify_playlist_url')}
               placeholderTextColor={theme.textSecondary}
               value={importUrl}
               onChangeText={setImportUrl}
@@ -487,23 +487,23 @@ export default function LibraryScreen() {
             />
             <TextInput
               style={[styles.input, { backgroundColor: theme.surfaceAlt, color: theme.textPrimary, borderColor: theme.border }]}
-              placeholder="New playlist name"
+              placeholder={t('library.new_playlist_name')}
               placeholderTextColor={theme.textSecondary}
               value={importName}
               onChangeText={setImportName}
             />
             {importStatus !== 'idle' && (
               <Text style={[styles.importStatusText, { color: theme.textSecondary }]}>
-                {importStatus === 'fetching' && 'Fetching playlist...'}
-                {importStatus === 'resolving' && `Importing track ${importProgress.current} of ${importProgress.total}...`}
+                {importStatus === 'fetching' && t('library.fetching_playlist')}
+                {importStatus === 'resolving' && t('library.importing_track', { current: importProgress.current, total: importProgress.total })}
                 {importStatus === 'done' && (
                   <Text style={{ color: theme.accent }}>
-                    Done! {importProgress.current} track{importProgress.current !== 1 ? 's' : ''} matched
+                    {t('library.done_tracks_matched', { count: importProgress.current, suffix: importProgress.current !== 1 ? 's' : '' })}
                   </Text>
                 )}
                 {importStatus === 'error' && (
                   <Text style={{ color: '#ff4444' }}>
-                    Could not import from that playlist. Try another URL.
+                    {t('library.import_error')}
                   </Text>
                 )}
               </Text>
@@ -522,7 +522,7 @@ export default function LibraryScreen() {
                 }}
               >
                 <Text style={{ color: theme.textPrimary, fontSize: 15, fontWeight: '600' }}>
-                  {importStatus === 'done' || importStatus === 'error' ? 'Close' : 'Cancel'}
+                  {importStatus === 'done' || importStatus === 'error' ? t('common.close') : t('common.cancel')}
                 </Text>
               </TouchableOpacity>
               {importStatus === 'idle' && (
@@ -530,7 +530,7 @@ export default function LibraryScreen() {
                   style={[styles.importModalButton, { backgroundColor: theme.accent, borderColor: theme.accent }]}
                   onPress={handleImportSpotify}
                 >
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Import</Text>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>{t('library.import')}</Text>
                 </TouchableOpacity>
               )}
             </View>

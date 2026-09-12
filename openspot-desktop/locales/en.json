@@ -151,7 +151,15 @@
     "downloaded": "Downloaded",
     "playlists": "My Playlists",
     "recently_played": "Recently Played",
-    "saved": "Saved"
+    "saved": "Saved",
+    "import_title": "Import from Spotify",
+    "spotify_playlist_url": "Spotify playlist URL",
+    "new_playlist_name": "New playlist name",
+    "fetching_playlist": "Fetching playlist...",
+    "importing_track": "Importing track {{current}} of {{total}}...",
+    "done_tracks_matched": "Done! {{count}} track{{suffix}} matched",
+    "import_error": "Could not import from that playlist. Try another URL.",
+    "import": "Import"
   },
   "downloads": {
     "downloaded_songs": "Downloaded Songs",
@@ -161,7 +169,8 @@
     "download_failed": "Download Failed",
     "date_added": "Date Added",
     "title": "Title",
-    "artist": "Artist"
+    "artist": "Artist",
+    "search_placeholder": "Search downloads..."
   },
   "settings": {
     "settings": "Settings",
@@ -255,6 +264,7 @@
     "check_health": "Check health",
     "no_providers": "Install an extension provider to configure.",
     "priority_hint": "The first eligible provider is tried first.",
-    "fallback_hint": "Allow these providers to receive the next attempt after a provider failure."
+    "fallback_hint": "Allow these providers to receive the next attempt after a provider failure.",
+    "storage_unavailable": "Extension storage is unavailable.", "install": "Install", "update": "Update", "remove": "Remove", "remove_title": "Remove extension", "remove_message": "Remove {{name}} and its stored data?", "details": "Details", "hide_details": "Hide details", "homepage": "Homepage", "capabilities": "Capabilities", "permissions": "Permissions", "none": "None", "registry_placeholder": "https://your-registry.example/registry.json"
   }
 }

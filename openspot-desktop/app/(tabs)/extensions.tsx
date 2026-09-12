@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -54,6 +55,7 @@ export default function ExtensionsScreen() {
   const [categories, setCategories] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [busyID, setBusyID] = useState<string | null>(null);
+  const [expandedID, setExpandedID] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const theme = useMemo(() => ({
@@ -104,6 +106,7 @@ export default function ExtensionsScreen() {
     setBusy(true);
     setError(null);
     try {
+      await initializeCore();
       await loadInstalled();
       await loadRepositoryConfig();
     } catch (cause) {
@@ -111,7 +114,7 @@ export default function ExtensionsScreen() {
     } finally {
       setBusy(false);
     }
-  }, [loadInstalled, loadRepositoryConfig]);
+  }, [initializeCore, loadInstalled, loadRepositoryConfig]);
 
   useEffect(() => {
     void refresh();
@@ -169,6 +172,56 @@ export default function ExtensionsScreen() {
     } finally {
       setBusyID(null);
     }
+  };
+
+  const installRepositoryExtension = async (extension: RepositoryExtension) => {
+    setBusyID(extension.id);
+    setError(null);
+    let packagePath: string | null = null;
+    try {
+      if (!extensionCoreBridge.isAvailable()) throw new Error(text('extensions.native_unavailable', 'Extension Core is not available in this build yet.'));
+       packagePath = await extensionCoreBridge.downloadRepositoryExtension(extension.id, '');
+      const result = extension.is_installed || extension.has_update
+        ? await extensionCoreBridge.upgradeFromPath(packagePath)
+        : await extensionCoreBridge.loadFromPath(packagePath);
+      await loadInstalled();
+      await loadRepository(true);
+      setExpandedID(result.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+       if (packagePath) await extensionCoreBridge.removeDownloadedPackage(packagePath).catch(() => {});
+      setBusyID(null);
+    }
+  };
+
+  const removeExtension = (extension: InstalledExtension) => {
+    Alert.alert(
+      text('extensions.remove_title', 'Remove extension'),
+      t('extensions.remove_message', { name: extensionTitle(extension), defaultValue: `Remove ${extensionTitle(extension)} and its stored data?` }),
+      [
+        { text: text('common.cancel', 'Cancel'), style: 'cancel' },
+        {
+          text: text('common.delete', 'Remove'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setBusyID(extension.id);
+              setError(null);
+              try {
+                await extensionCoreBridge.remove(extension.id);
+                await loadInstalled();
+                setExpandedID(null);
+              } catch (cause) {
+                setError(cause instanceof Error ? cause.message : String(cause));
+              } finally {
+                setBusyID(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
   };
 
   const visibleStore = store.filter((extension) => {
@@ -245,6 +298,21 @@ export default function ExtensionsScreen() {
                 <Text style={[styles.meta, { color: theme.secondary }]}>{currentHealth?.status || text('extensions.not_checked', 'Not checked')}</Text>
               </View>
             </View>
+            <View style={styles.actionRow}>
+              <Pressable style={[styles.secondaryButton, { borderColor: theme.border }]} onPress={() => setExpandedID((current) => current === extension.id ? null : extension.id)}>
+                <Ionicons name={expandedID === extension.id ? 'chevron-up' : 'information-circle-outline'} size={16} color={theme.accent} />
+                <Text style={[styles.buttonText, { color: theme.text }]}>{expandedID === extension.id ? text('extensions.hide_details', 'Hide details') : text('extensions.details', 'Details')}</Text>
+              </Pressable>
+              <Pressable style={[styles.secondaryButton, { borderColor: '#d64a4a' }]} onPress={() => removeExtension(extension)} disabled={busyID === extension.id}>
+                <Ionicons name="trash-outline" size={16} color="#d64a4a" />
+                <Text style={[styles.buttonText, { color: '#d64a4a' }]}>{text('extensions.remove', 'Remove')}</Text>
+              </Pressable>
+            </View>
+            {expandedID === extension.id && <View style={[styles.details, { backgroundColor: theme.elevated }]}>
+              {!!extension.homepage && <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.homepage', 'Homepage')}: {extension.homepage}</Text>}
+              <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.capabilities', 'Capabilities')}: {(extension.capabilities ?? extension.types ?? []).join(' · ') || text('extensions.none', 'None')}</Text>
+              {!!extension.permissions?.length && <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.permissions', 'Permissions')}: {extension.permissions.join(' · ')}</Text>}
+            </View>}
           </View>
         );
       })}
@@ -261,7 +329,7 @@ export default function ExtensionsScreen() {
           onChangeText={setRepositoryURL}
           autoCapitalize="none"
           autoCorrect={false}
-          placeholder="https://example.com/registry.json"
+          placeholder={text('extensions.registry_placeholder', 'https://your-registry.example/registry.json')}
           placeholderTextColor={theme.secondary}
           style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.elevated }]}
         />
@@ -290,6 +358,15 @@ export default function ExtensionsScreen() {
           <View style={styles.actionRow}>
             <View style={styles.flexOne}><Text style={[styles.meta, { color: theme.secondary }]}>{extension.has_update ? text('extensions.update_available', 'Update available') : extension.is_installed ? text('extensions.installed', 'Installed') : ''}</Text></View>
             {!!extension.sha256 && <Text style={[styles.checksum, { color: theme.secondary }]}>{extension.sha256.slice(0, 12)}…</Text>}
+          </View>
+          <View style={styles.actionRow}>
+            <Pressable
+              style={[styles.primaryButton, { backgroundColor: extension.is_installed && !extension.has_update ? theme.elevated : theme.accent }]}
+              onPress={() => void installRepositoryExtension(extension)}
+              disabled={busyID === extension.id || (Boolean(extension.is_installed) && !extension.has_update)}
+            >
+              {busyID === extension.id ? <ActivityIndicator color="#fff" size="small" /> : <Text style={[styles.primaryButtonText, extension.is_installed && !extension.has_update && { color: theme.secondary }]}>{extension.has_update ? text('extensions.update', 'Update') : extension.is_installed ? text('extensions.installed', 'Installed') : text('extensions.install', 'Install')}</Text>}
+            </Pressable>
           </View>
         </View>
       ))}
@@ -361,6 +438,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 48 },
   listGap: { gap: 12 },
   card: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 9 },
+  details: { borderRadius: 11, padding: 10, gap: 5 },
   rowStart: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   flexOne: { flex: 1 },
   extensionIcon: { width: 48, height: 48, borderRadius: 13, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
@@ -395,3 +473,8 @@ const styles = StyleSheet.create({
 });
 
 
+  const initializeCore = useCallback(async () => {
+    if (!extensionCoreBridge.isAvailable()) return;
+    await extensionCoreBridge.initialize();
+    await extensionCoreBridge.initRepository();
+  }, []);

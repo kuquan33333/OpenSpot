@@ -512,7 +512,7 @@ export default function DownloadsScreen() {
               ref={searchInputRef}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search downloads..."
+              placeholder={t('downloads.search_placeholder')}
               placeholderTextColor={theme.textSecondary}
               style={[styles.searchInput, { color: theme.textPrimary }]}
               autoFocus
