@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   TouchableOpacity,
   Animated,
@@ -9,13 +9,10 @@ import {
   Text
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Track } from '../types/music';
-import { PlaylistStorage } from '@/lib/playlist-storage';
+import { downloadTrack, getOfflineDownload } from '@/lib/offline-download-service';
 import { useTranslation } from 'react-i18next';
-import { MusicAPI } from '../lib/music-api';
 
 
 const ANIMATION_DURATION = 350;
@@ -52,16 +49,6 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
 
   const bounceAnim = useRef(new Animated.Value(0)).current;
-  const downloadRef = useRef<FileSystem.DownloadResumable | null>(null);
-
-  const getOfflineFilePath = useCallback((extension: 'mp3' | 'jpg') => {
-    if (!track || !track.id) {
-      console.error("Track or track.id is undefined in getOfflineFilePath");
-      return `${FileSystem.documentDirectory}offline_unknown.${extension}`;
-    }
-    return `${FileSystem.documentDirectory}offline_${track.id}.${extension}`;
-  }, [track]);
-
   useEffect(() => {
     let isMounted = true;
 
@@ -69,23 +56,8 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
       if (!track || !track.id) return;
 
       try {
-        const offlineData = await AsyncStorage.getItem(`offline_${track.id}`);
-        if (!isMounted) return;
-
-        if (offlineData) {
-          const { fileUri } = JSON.parse(offlineData);
-          if (typeof fileUri === 'string') {
-            const fileInfo = await FileSystem.getInfoAsync(fileUri);
-            if (isMounted) {
-              setIsDownloaded(fileInfo.exists);
-            }
-          } else {
-            if (isMounted) setIsDownloaded(false);
-            await AsyncStorage.removeItem(`offline_${track.id}`);
-          }
-        } else {
-          if (isMounted) setIsDownloaded(false);
-        }
+        const metadata = await getOfflineDownload(String(track.id));
+        if (isMounted) setIsDownloaded(Boolean(metadata));
       } catch (error) {
         console.error('Error checking download status:', error);
         if (isMounted) setIsDownloaded(false);
@@ -138,22 +110,6 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
     }
   }, [track?.id]);
 
-  const ensureDirectoryExists = async () => {
-    try {
-      const directoryUri = FileSystem.documentDirectory!;
-      const dirInfo = await FileSystem.getInfoAsync(directoryUri);
-      if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(directoryUri, {
-          intermediates: true,
-        });
-      }
-    } catch (error) {
-      console.error('Error ensuring directory exists:', error);
-      throw new Error('Cannot access storage directory');
-    }
-  };
-
-
   const handleDownload = async () => {
     if (isDownloading || isDownloaded) return;
     if (!track || !track.id) {
@@ -166,70 +122,19 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
       setIsDownloading(true);
       downloadingTrackIds.add(track.id.toString());
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      await ensureDirectoryExists();
-
-      const trackIdStr = track.id.toString();
-      const audioUrl = await MusicAPI.getDownloadUrl(trackIdStr, track);
-      const fileUri = getOfflineFilePath('mp3');
-
-      downloadRef.current = FileSystem.createDownloadResumable(audioUrl, fileUri, { sessionType: FileSystem.FileSystemSessionType.BACKGROUND });
-      const result = await downloadRef.current.downloadAsync();
-
-      if (!result || !result.uri) {
-        throw new Error('Download failed or was cancelled');
-      }
-
-      const thumbUri = getOfflineFilePath('jpg');
-      try {
-        if (track.images?.large) {
-          await FileSystem.downloadAsync(track.images.large, thumbUri);
-        } else {
-          console.warn('No thumbnail URL found for this track, skipping thumbnail download.');
-        }
-      } catch (e) {
-        console.warn('Thumbnail download failed, continuing without it:', e);
-      }
-
-      await AsyncStorage.setItem(`offline_${track.id}`, JSON.stringify({
-        fileUri: result.uri,
-        thumbUri: track.images?.large ? thumbUri : null,
-        trackData: track,
-        downloadedAt: new Date().toISOString(),
-      }));
-
-      await PlaylistStorage.addTrackToPlaylists(track, ['offline']);
+      const result = await downloadTrack(track);
 
       setIsDownloaded(true);
       showNotification(t('components.downloaded') || 'Downloaded', 'success'); 
 
       if (onDownloaded) {
-        onDownloaded(result.uri);
+        onDownloaded(result.fileUri);
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     } catch (e: any) {
       console.error('Offline download failed:', e);
-
-      try {
-        if (downloadRef.current) {
-          await downloadRef.current.cancelAsync();
-        }
-        const fileUri = getOfflineFilePath('mp3');
-        const fileInfo = await FileSystem.getInfoAsync(fileUri);
-        if (fileInfo.exists) {
-          await FileSystem.deleteAsync(fileUri);
-        }
-        const thumbUri = getOfflineFilePath('jpg');
-        const thumbInfo = await FileSystem.getInfoAsync(thumbUri);
-        if (thumbInfo.exists) {
-          await FileSystem.deleteAsync(thumbUri);
-        }
-        await AsyncStorage.removeItem(`offline_${track?.id}`);
-      } catch (cleanupError) {
-        console.error("Error during cleanup after download failure:", cleanupError);
-      }
 
       const errorMessage = e instanceof Error ? e.message : 'Unknown error';
       showNotification(t('components.download_failed') || `Download failed: ${errorMessage}`, 'error'); // Call parent notification
@@ -239,7 +144,6 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
     } finally {
       setIsDownloading(false);
       if (track?.id) downloadingTrackIds.delete(track.id.toString());
-      downloadRef.current = null;
     }
   };
 

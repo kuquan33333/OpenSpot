@@ -5,26 +5,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PlaylistStorage } from '@/lib/playlist-storage';
+import { listOfflineDownloads, removeOfflineDownload } from '@/lib/offline-download-service';
 import { Track } from '@/types/music';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
-import { MusicAPI } from '@/lib/music-api';
 import { MusicPlayerContext } from './_layout';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
-import { useConnectivity } from '@/hooks/useConnectivity';
 
 type SortKey = 'dateAdded' | 'title' | 'artist';
-
-interface OfflineTrackMeta {
-  trackData: Track;
-  fileUri?: string;
-  thumbUri?: string;
-}
 
 interface TrackRowProps {
   item: Track;
@@ -129,8 +119,6 @@ export default function DownloadsScreen() {
   const { t } = useTranslation();
   const colorScheme = useColorScheme();
   const isDark = colorScheme !== 'light';
-  const { isOffline } = useConnectivity();
-
   const theme = useMemo(() => ({
     background: isDark ? '#050505' : '#f5efe6',
     surface: isDark ? '#121212' : '#fffaf2',
@@ -163,50 +151,28 @@ export default function DownloadsScreen() {
   const fetchOfflineTracks = useCallback(async () => {
     setLoading(true);
     try {
-      const playlists = await PlaylistStorage.getPlaylists();
-      const offline = playlists.find(pl => pl.name === 'offline');
-      if (!offline) { setTracks([]); return; }
-
-      const reversedIds = [...offline.trackIds].reverse();
-
-      const entries = await Promise.all(
-        reversedIds.map(async (id) => {
-          try {
-            const raw = await AsyncStorage.getItem(`offline_${id}`);
-            if (raw) {
-              const meta: OfflineTrackMeta = JSON.parse(raw);
-              if (meta.trackData) return { id, meta };
-            }
-          } catch { /* ignore corrupt entries */ }
-
-          if (!isOffline) {
-            try {
-              const resolved = await MusicAPI.resolveTrackById(id);
-              if (resolved) return { id, meta: { trackData: resolved } as OfflineTrackMeta };
-            } catch (e) {
-              console.warn(`API fallback failed for track ${id}:`, e);
-            }
-          }
-          return null;
-        })
-      );
-
-      const valid = entries.filter(Boolean) as { id: string; meta: OfflineTrackMeta }[];
-      setTracks(valid.map(e => e.meta.trackData));
-
+      const entries = (await listOfflineDownloads()).reverse();
+      setTracks(entries.map((entry) => entry.metadata.trackData));
       const newThumbMap: Record<string, string> = {};
-      for (const { id, meta } of valid) {
-        if (meta.thumbUri) newThumbMap[id] = meta.thumbUri;
+      for (const entry of entries) {
+        const id = entry.metadata.trackData.id.toString();
+        if (entry.metadata.thumbUri) newThumbMap[id] = entry.metadata.thumbUri;
       }
       setThumbMap(newThumbMap);
+    } catch (error) {
+      console.error('[Downloads] failed to restore offline library:', error);
+      setTracks([]);
+      setThumbMap({});
     } finally {
       setLoading(false);
     }
-  }, [isOffline]);
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
-      fetchOfflineTracks();
+      void fetchOfflineTracks().catch((error) => {
+        console.error('[Downloads] focus refresh failed:', error);
+      });
       return () => {
         setSelectionMode(false);
         setSelectedIds(new Set());
@@ -249,14 +215,7 @@ export default function DownloadsScreen() {
 
   const deleteTrack = useCallback(async (track: Track) => {
     try {
-      await PlaylistStorage.removeTrackFromPlaylist(track.id.toString(), 'offline');
-      const raw = await AsyncStorage.getItem(`offline_${track.id}`);
-      if (raw) {
-        const { fileUri, thumbUri } = JSON.parse(raw);
-        if (fileUri) await FileSystem.deleteAsync(fileUri, { idempotent: true });
-        if (thumbUri) await FileSystem.deleteAsync(thumbUri, { idempotent: true });
-        await AsyncStorage.removeItem(`offline_${track.id}`);
-      }
+      await removeOfflineDownload(track.id.toString());
       
       setTracks(prev => prev.filter(t => t.id !== track.id));
       setThumbMap(prev => {

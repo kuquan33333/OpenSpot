@@ -11,6 +11,7 @@ export interface Playlist {
 
 const PLAYLISTS_KEY = 'user_playlists';
 const TRACK_DATA_KEY = 'user_track_data';
+export const OFFLINE_PLAYLIST_NAME = 'offline';
 
 export const PlaylistStorage = {
   async getPlaylists(): Promise<Playlist[]> {
@@ -50,6 +51,13 @@ export const PlaylistStorage = {
           changed = true;
         }
       }
+    }
+    const missingPlaylists = playlistNames.filter((name) =>
+      name.trim() && !playlists.some((playlist) => playlist.name === name)
+    );
+    for (const name of missingPlaylists) {
+      playlists.push({ name, cover: '', trackIds: [track.id.toString()] });
+      changed = true;
     }
     if (changed) {
       await this.savePlaylists(playlists);
