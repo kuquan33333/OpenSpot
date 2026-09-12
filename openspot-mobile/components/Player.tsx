@@ -89,12 +89,34 @@ export function Player({
   const [volume, setVolume] = useState(1.0);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullScreenOpen, setIsFullScreenOpen] = useState(false);
+  const pendingQueueAfterFullScreenRef = useRef(false);
   const [isSeeking] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadStatus, setDownloadStatus] = useState<'idle' | 'downloading' | 'success' | 'error'>('idle');
   const [downloadError, setDownloadError] = useState<string>('');
   const [shareMode, setShareMode] = useState(false);
+
+  const openQueueAfterFullScreenDismiss = useCallback(() => {
+    if (!pendingQueueAfterFullScreenRef.current) return;
+    pendingQueueAfterFullScreenRef.current = false;
+    onQueueToggle();
+  }, [onQueueToggle]);
+
+  const handleFullScreenQueueToggle = useCallback(() => {
+    if (!isFullScreenOpen) {
+      onQueueToggle();
+      return;
+    }
+    pendingQueueAfterFullScreenRef.current = true;
+    setIsFullScreenOpen(false);
+  }, [isFullScreenOpen, onQueueToggle]);
+
+  useEffect(() => {
+    if (isFullScreenOpen || !pendingQueueAfterFullScreenRef.current) return;
+    const timer = setTimeout(openQueueAfterFullScreenDismiss, 350);
+    return () => clearTimeout(timer);
+  }, [isFullScreenOpen, openQueueAfterFullScreenDismiss]);
 
   const { isLiked, toggleLike } = useLikedSongs();
   const { t } = useTranslation();
@@ -851,6 +873,7 @@ export function Player({
       <FullScreenPlayer
         isOpen={isFullScreenOpen}
         onClose={() => setIsFullScreenOpen(false)}
+        onDismiss={openQueueAfterFullScreenDismiss}
         track={track}
         isPlaying={isPlaying}
         onPlayingChange={onPlayingChange}
@@ -866,7 +889,7 @@ export function Player({
         onShuffle={handleShuffle}
         onShare={handleShare}
         musicQueue={musicQueue}
-        onQueueToggle={onQueueToggle}
+        onQueueToggle={handleFullScreenQueueToggle}
       />
     </>
   );

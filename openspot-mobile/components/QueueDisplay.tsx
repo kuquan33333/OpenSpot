@@ -69,17 +69,26 @@ export function QueueDisplay({
   );
 
   useEffect(() => {
-    if (isOpen && musicQueue.tracks.length > 0) {
-      const scrollIndex = Math.max(0, musicQueue.currentIndex - 3);
-      setTimeout(() => {
-        flatListRef.current?.scrollToIndex({
-          index: scrollIndex,
-          animated: true,
-          viewPosition: 0,
-        });
-      }, 100);
-    }
+    if (!isOpen || musicQueue.tracks.length === 0) return;
+    const scrollIndex = Math.max(0, Math.min(musicQueue.currentIndex - 3, musicQueue.tracks.length - 1));
+    const timer = setTimeout(() => {
+      flatListRef.current?.scrollToIndex({ index: scrollIndex, animated: false, viewPosition: 0 });
+    }, 250);
+    return () => clearTimeout(timer);
   }, [isOpen, musicQueue.currentIndex, musicQueue.tracks.length]);
+
+  const scrollToCurrentTrack = useCallback(() => {
+    if (musicQueue.tracks.length === 0) return;
+    const index = Math.max(0, Math.min(musicQueue.currentIndex - 3, musicQueue.tracks.length - 1));
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToIndex({ index, animated: false, viewPosition: 0 });
+    });
+  }, [musicQueue.currentIndex, musicQueue.tracks.length]);
+
+  const handleScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
+    flatListRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index), animated: false });
+    setTimeout(scrollToCurrentTrack, 80);
+  }, [scrollToCurrentTrack]);
 
   const renderTrackItem = useCallback(
     ({ item, index }: { item: Track; index: number }) => {
@@ -261,7 +270,7 @@ export function QueueDisplay({
   );
 
   return (
-    <Modal visible={isOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={isOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose} onShow={scrollToCurrentTrack}>
       <View style={[styles.container, { backgroundColor: theme.base }]}>
         <BlurView intensity={isDark ? 10 : 0} tint={isDark ? 'dark' : 'light'} style={styles.blurContainer}>
           {renderHeader()}
@@ -281,6 +290,8 @@ export function QueueDisplay({
               removeClippedSubviews={true}
               maxToRenderPerBatch={10}
               windowSize={5}
+              onLayout={scrollToCurrentTrack}
+              onScrollToIndexFailed={handleScrollToIndexFailed}
             />
           )}
         </BlurView>

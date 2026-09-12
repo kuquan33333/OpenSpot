@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +21,7 @@ import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
 import { fileUriToPath, pathToFileUri } from '@/lib/extensions/file-system-paths';
 import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
 import type { ExtensionHealthResult, InstalledExtension, RepositoryExtension } from '@/lib/extensions/extension-types';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 type ExtensionPage = 'store' | 'installed' | 'priority' | 'fallback';
 
@@ -424,7 +426,8 @@ export default function ExtensionsScreen() {
   const pageTitle = page === 'store' ? text('extensions.store', 'Extension Store') : page === 'priority' ? text('extensions.priority', 'Provider Priority') : page === 'fallback' ? text('extensions.fallback', 'Provider Fallback') : text('extensions.installed', 'Installed Extensions');
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <ErrorBoundary scope="Extensions">
+      <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}><Ionicons name="chevron-back" size={24} color={theme.text} /></Pressable>
         <View style={styles.flexOne}><Text style={[styles.title, { color: theme.text }]}>{text('extensions.title', 'Extensions')}</Text><Text style={[styles.meta, { color: theme.secondary }]}>{pageTitle}</Text></View>
@@ -441,7 +444,8 @@ export default function ExtensionsScreen() {
         {page === 'priority' && renderPriority()}
         {page === 'fallback' && renderFallback()}
       </ScrollView>
-    </View>
+      </SafeAreaView>
+    </ErrorBoundary>
   );
 }
 
@@ -451,7 +455,7 @@ function EmptyState({ theme, text }: { theme: { surface: string; border: string;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 8, gap: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, gap: 10 },
   backButton: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 27, fontWeight: '800' },
   pageTabs: { paddingHorizontal: 16, paddingVertical: 8, gap: 8, flexDirection: 'row', flexWrap: 'wrap' },

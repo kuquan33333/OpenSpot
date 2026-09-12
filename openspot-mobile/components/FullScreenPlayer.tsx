@@ -76,6 +76,7 @@ interface FullScreenPlayerProps {
   onShuffle: () => void;
   musicQueue?: any;
   onQueueToggle?: () => void;
+  onDismiss?: () => void;
   onPlaylistsUpdated?: () => void;
   onShare?: () => void;
 }
@@ -98,6 +99,7 @@ export function FullScreenPlayer({
   onShuffle,
   musicQueue,
   onQueueToggle,
+  onDismiss,
   onPlaylistsUpdated,
 }: FullScreenPlayerProps) {
   const router = useRouter();
@@ -567,6 +569,7 @@ export function FullScreenPlayer({
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={onClose}
+      onDismiss={onDismiss}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaView style={[styles.container, { backgroundColor: theme.base }]}>

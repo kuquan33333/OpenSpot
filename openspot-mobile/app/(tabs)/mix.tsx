@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +13,7 @@ import { runAutoMixParityChecks } from '@/lib/automix/auto-mix-parity-check';
 import { resolveAudioMeta } from '@/lib/automix/audio-meta-repository';
 import type { AutoMixSettings, AutoMixTrack } from '@/lib/automix/auto-mix-types';
 import type { Track } from '@/types/music';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const DURATION_OPTIONS: Array<AutoMixSettings['durationMs']> = ['auto', 5_000, 10_000, 15_000, 20_000, 30_000, 45_000];
 
@@ -62,7 +64,9 @@ export default function MixScreen() {
   };
 
   return (
-    <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
+    <ErrorBoundary scope="Mix">
+      <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
+        <ScrollView style={{ backgroundColor: theme.background }} contentContainerStyle={styles.content}>
       <View style={styles.titleRow}><View><Text style={[styles.eyebrow, { color: theme.accent }]}>{text('mix.eyebrow', 'PLAYBACK')}</Text><Text style={[styles.title, { color: theme.text }]}>{text('mix.title', 'Mix')}</Text></View><Ionicons name="shuffle" size={30} color={theme.accent} /></View>
       <Text style={[styles.subtitle, { color: theme.secondary }]}>{text('mix.subtitle', 'Blend the next track with a beat-aware transition.')}</Text>
 
@@ -90,7 +94,9 @@ export default function MixScreen() {
       </View>
 
       <TouchableOpacity style={[styles.checkButton, { borderColor: theme.border }]} onPress={() => setParityPassed(runAutoMixParityChecks().passed)}><Ionicons name={parityPassed ? 'checkmark-circle' : 'pulse'} size={18} color={parityPassed ? theme.accent : theme.secondary} /><Text style={{ color: theme.text, fontWeight: '700' }}>{parityPassed === null ? text('mix.run_checks', 'Run AutoMix parity checks') : parityPassed ? text('mix.checks_passed', 'Parity checks passed') : text('mix.checks_failed', 'Parity checks need attention')}</Text></TouchableOpacity>
-    </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
+    </ErrorBoundary>
   );
 }
 
@@ -104,5 +110,6 @@ function TrackPair({ track, label, meta, theme }: { track: Track | null; label: 
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1 },
   content: { padding: 20, paddingBottom: 120 }, titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }, title: { fontSize: 32, fontWeight: '800', marginTop: 4 }, subtitle: { fontSize: 14, lineHeight: 20, marginTop: 8, marginBottom: 18 }, card: { borderWidth: 1, borderRadius: 18, padding: 16, marginBottom: 14 }, sectionTitle: { fontSize: 16, fontWeight: '800', marginBottom: 13 }, segmentRow: { flexDirection: 'row', gap: 8 }, segment: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 12, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 }, segmentText: { fontWeight: '800', fontSize: 12 }, durationRow: { gap: 8, paddingBottom: 6 }, durationChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 13, paddingVertical: 9 }, settingRow: { borderTopWidth: 1, paddingTop: 13, marginTop: 13, flexDirection: 'row', alignItems: 'center' }, trackRow: { flexDirection: 'row', alignItems: 'center', minHeight: 70 }, artwork: { width: 58, height: 58, borderRadius: 10, marginRight: 12 }, artworkFallback: { justifyContent: 'center', alignItems: 'center' }, label: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' }, arrow: { borderTopWidth: 1, borderBottomWidth: 1, alignItems: 'center', paddingVertical: 5, marginVertical: 9 }, plan: { borderRadius: 12, padding: 12, marginTop: 15 }, checkButton: { borderWidth: 1, borderRadius: 14, minHeight: 48, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 9 },
 });
