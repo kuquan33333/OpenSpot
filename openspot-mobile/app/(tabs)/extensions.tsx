@@ -21,14 +21,14 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
 import { fileUriToPath, pathToFileUri } from '@/lib/extensions/file-system-paths';
 import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
-import { extensionCapabilityNames, type ExtensionHealthResult, type InstalledExtension, type RepositoryExtension } from '@/lib/extensions/extension-types';
+import { extensionCapabilityNames, getExtensionCompatibilityError, type ExtensionHealthResult, type InstalledExtension, type RepositoryExtension } from '@/lib/extensions/extension-types';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { getExtensionCapabilityOverrides, setExtensionCapabilityEnabled, type ExtensionCapability, type ExtensionCapabilityOverrides } from '@/lib/providers/extension-capability-settings';
 
 type ExtensionPage = 'store' | 'installed' | 'priority' | 'fallback';
 
 const DEFAULT_REPOSITORY_URL = process.env.EXPO_PUBLIC_EXTENSION_REGISTRY_URL?.trim() ?? '';
-const APP_VERSION = Constants.expoConfig?.version ?? '3.1.5';
+const APP_VERSION = Constants.expoConfig?.version ?? '4.9.1';
 
 function extensionTitle(extension: InstalledExtension | RepositoryExtension): string {
   return ('display_name' in extension && extension.display_name) || extension.name || extension.id;
@@ -189,6 +189,11 @@ export default function ExtensionsScreen() {
   };
 
   const toggleExtension = async (extension: InstalledExtension) => {
+    const compatibilityError = getExtensionCompatibilityError(extension, APP_VERSION);
+    if (compatibilityError) {
+      setError(compatibilityError);
+      return;
+    }
     setBusyID(extension.id);
     setError(null);
     try {
@@ -311,6 +316,9 @@ export default function ExtensionsScreen() {
         <EmptyState theme={theme} text={text('extensions.empty_installed', 'No extensions installed yet.')} />
       ) : installed.map((extension) => {
         const currentHealth = health[extension.id];
+        const compatibilityError = getExtensionCompatibilityError(extension, APP_VERSION);
+        const extensionUsable = !compatibilityError;
+        const displayedHealth = compatibilityError ? 'unsupported' : currentHealth?.status;
         return (
           <View key={extension.id} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.rowStart}>
@@ -327,21 +335,21 @@ export default function ExtensionsScreen() {
                 accessibilityState={{ checked: Boolean(extension.enabled) }}
                 style={[styles.switch, { backgroundColor: extension.enabled ? theme.accent : theme.elevated }]}
                 onPress={() => void toggleExtension(extension)}
-                disabled={busyID === extension.id}
+                disabled={busyID === extension.id || !extensionUsable}
               >
                 {busyID === extension.id ? <ActivityIndicator color="#fff" size="small" /> : <View style={[styles.switchThumb, extension.enabled && styles.switchThumbOn]} />}
               </Pressable>
             </View>
             {!!extension.description && <Text style={[styles.body, { color: theme.secondary }]}>{extension.description}</Text>}
-            {!!extension.error && <Text style={styles.errorText}>{extension.error}</Text>}
+            {!!compatibilityError && <Text style={styles.errorText}>{compatibilityError}</Text>}
             <View style={styles.actionRow}>
-              <Pressable style={[styles.secondaryButton, { borderColor: theme.border }]} onPress={() => void checkExtensionHealth(extension)} disabled={busyID === extension.id}>
+              <Pressable style={[styles.secondaryButton, { borderColor: theme.border }]} onPress={() => void checkExtensionHealth(extension)} disabled={busyID === extension.id || !extensionUsable}>
                 <Ionicons name="pulse-outline" size={16} color={theme.accent} />
-                <Text style={[styles.buttonText, { color: theme.text }]}>{currentHealth?.status || text('extensions.check_health', 'Check health')}</Text>
+                <Text style={[styles.buttonText, { color: theme.text }]}>{displayedHealth || text('extensions.check_health', 'Check health')}</Text>
               </Pressable>
               <View style={styles.healthDotWrap}>
-                <View style={[styles.healthDot, { backgroundColor: healthColor(currentHealth?.status, theme.accent) }]} />
-                <Text style={[styles.meta, { color: theme.secondary }]}>{currentHealth?.status || text('extensions.not_checked', 'Not checked')}</Text>
+                <View style={[styles.healthDot, { backgroundColor: healthColor(displayedHealth, theme.accent) }]} />
+                <Text style={[styles.meta, { color: theme.secondary }]}>{displayedHealth || text('extensions.not_checked', 'Not checked')}</Text>
               </View>
             </View>
             <View style={styles.actionRow}>

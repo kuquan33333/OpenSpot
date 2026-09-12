@@ -1,5 +1,5 @@
 import { decodeExtensionCoreResponse } from './extension-core-response';
-import { extensionCapabilityNames, hasExtensionCapability } from './extension-types';
+import { extensionCapabilityNames, getExtensionCompatibilityError, hasExtensionCapability, compareExtensionVersions } from './extension-types';
 
 function assertEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -34,6 +34,18 @@ assertEqual(
   hasExtensionCapability({ id: 'soundcloud', capabilities: mapCapabilities }, 'metadata_provider'),
   true,
   'map capability lookup',
+);
+assertEqual(compareExtensionVersions('4.9.1', '4.9.1'), 0, 'equal app versions');
+assertEqual(compareExtensionVersions('4.9.0', '4.9.1'), -1, 'older app version');
+assertEqual(
+  getExtensionCompatibilityError({ id: 'soundcloud', min_app_version: '4.9.1' }, '4.9.0'),
+  'requires app 4.9.1 or later (installed: 4.9.0)',
+  'extension app-version gate',
+);
+assertEqual(
+  getExtensionCompatibilityError({ id: 'soundcloud', min_app_version: '4.9.1' }, '4.9.1'),
+  null,
+  'compatible extension app version',
 );
 
 console.log('Extension bridge response regression: PASS');

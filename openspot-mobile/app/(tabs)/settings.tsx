@@ -26,7 +26,7 @@ import { MusicAPI } from '@/lib/music-api';
 import { clearAudioMetaCache } from '@/lib/automix/audio-meta-repository';
 import { clearDiagnostics, getDiagnostics, subscribeDiagnostics } from '@/lib/diagnostics';
 import { clearPlaybackDiagnostics, getPlaybackDiagnostics } from '@/lib/playback/track-player-runtime';
-const CURRENT_VERSION = '3.1.5';
+const CURRENT_VERSION = '4.9.1';
 const LINKEDIN_URL = 'https://www.linkedin.com/in/jash-gro/';
 const TELEGRAM_URL = 'https://telegram.dog/deveIoper_x';
 const INSTAGRAM_URL = 'https://www.instagram.com/jash_gro/';

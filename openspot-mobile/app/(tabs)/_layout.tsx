@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useToast } from '@/hooks/useToast';
 import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 interface PlatformUpdateConfig {
   latest_version: string;
@@ -83,7 +84,7 @@ export default function TabLayout() {
 
   const [updateConfig, setUpdateConfig] = useState<UpdateConfig | null>(null);
   const [showForceUpdate, setShowForceUpdate] = useState(false);
-  const currentVersion = Constants.expoConfig?.version ?? '3.1.5';
+  const currentVersion = Constants.expoConfig?.version ?? '4.9.1';
 
   const compareVersions = (v1: string, v2: string): number => {
     const parts1 = v1.split('.').map(Number);
@@ -125,7 +126,7 @@ export default function TabLayout() {
 
   useEffect(() => {
     void syncExtensionProviders(currentVersion).catch((error) => console.warn('[Extensions] provider sync unavailable:', error));
-  }, []);
+  }, [currentVersion]);
 
   const pendingAutoPlayRef = useRef(false);
 
@@ -282,35 +283,39 @@ export default function TabLayout() {
           </Tabs>
 
           {isQueueOpen && (
-            <QueueDisplay
-              isOpen={isQueueOpen}
-              onClose={closeQueue}
-              musicQueue={musicQueue}
-              onTrackSelect={handleQueueTrackSelect}
-              currentTrack={currentTrack}
-            />
+            <ErrorBoundary scope="Queue">
+              <QueueDisplay
+                isOpen={isQueueOpen}
+                onClose={closeQueue}
+                musicQueue={musicQueue}
+                onTrackSelect={handleQueueTrackSelect}
+                currentTrack={currentTrack}
+              />
+            </ErrorBoundary>
           )}
 
           {currentTrack && (
-            <View
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: 50 + insets.bottom,
-                zIndex: 100,
-              }}
-            >
-              <Player
-                track={currentTrack}
-                isPlaying={isPlaying}
-                onPlayingChange={handlePlayingStateChange}
-                musicQueue={musicQueue}
-                onQueueToggle={toggleQueue}
-                pendingAutoPlayRef={pendingAutoPlayRef}
-                showToast={showToast}
-              />
-            </View>
+            <ErrorBoundary scope="Player">
+              <View
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 50 + insets.bottom,
+                  zIndex: 100,
+                }}
+              >
+                <Player
+                  track={currentTrack}
+                  isPlaying={isPlaying}
+                  onPlayingChange={handlePlayingStateChange}
+                  musicQueue={musicQueue}
+                  onQueueToggle={toggleQueue}
+                  pendingAutoPlayRef={pendingAutoPlayRef}
+                  showToast={showToast}
+                />
+              </View>
+            </ErrorBoundary>
           )}
         </View>
 

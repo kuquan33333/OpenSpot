@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useContext, useCallback } from 'react';
 import { View, StyleSheet, StatusBar, ScrollView, TouchableOpacity, Text, Modal, TextInput, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PlaylistList } from '@/components/PlaylistList';
@@ -8,10 +8,9 @@ import { MusicPlayerContext } from './_layout';
 import { Ionicons } from '@expo/vector-icons';
 import { PlaylistStorage, Playlist } from '@/lib/playlist-storage';
 import { MusicAPI } from '@/lib/music-api';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
-import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { importSpotifyPlaylist } from '@/lib/spotify-import';
@@ -298,42 +297,46 @@ function LibraryScreenContent() {
               const isActiveTrack = currentTrack?.id?.toString() === item.id?.toString();
               const isCurrentlyPlaying = isActiveTrack && isPlaying;
               return (
-                <TouchableOpacity
-                  onPress={() => handleTrackSelect(item, likedTracks, index)}
-                  activeOpacity={0.75}
+                <View
                   style={[
                     styles.playlistTrackRow,
                     { backgroundColor: theme.surface, borderColor: isActiveTrack ? theme.accent : theme.border },
                     isActiveTrack && { borderWidth: 1.5 },
                   ]}
                 >
-                  <View style={styles.playlistArtWrapper}>
-                    <Image
-                      source={{ uri: item.images?.large || item.albumCover }}
-                      style={styles.playlistAlbumArt}
-                      contentFit="cover"
-                    />
-                    {isActiveTrack && (
-                      <View style={[styles.playlistArtOverlay, { backgroundColor: '#000000aa' }]}>
-                        <Ionicons
-                          name={isCurrentlyPlaying ? 'musical-notes' : 'pause'}
-                          size={18}
-                          color={theme.accent}
-                        />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.playlistTrackInfo}>
-                    <Text
-                      style={[styles.playlistTrackTitle, { color: isActiveTrack ? theme.accent : theme.textPrimary }]}
-                      numberOfLines={1}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text style={[styles.playlistTrackArtist, { color: theme.textSecondary }]} numberOfLines={1}>
-                      {item.artist}
-                    </Text>
-                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleTrackSelect(item, likedTracks, index)}
+                    activeOpacity={0.75}
+                    style={styles.playlistTrackMain}
+                  >
+                    <View style={styles.playlistArtWrapper}>
+                      <Image
+                        source={{ uri: item.images?.large || item.albumCover }}
+                        style={styles.playlistAlbumArt}
+                        contentFit="cover"
+                      />
+                      {isActiveTrack && (
+                        <View style={[styles.playlistArtOverlay, { backgroundColor: '#000000aa' }]}>
+                          <Ionicons
+                            name={isCurrentlyPlaying ? 'musical-notes' : 'pause'}
+                            size={18}
+                            color={theme.accent}
+                          />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.playlistTrackInfo}>
+                      <Text
+                        style={[styles.playlistTrackTitle, { color: isActiveTrack ? theme.accent : theme.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text style={[styles.playlistTrackArtist, { color: theme.textSecondary }]} numberOfLines={1}>
+                        {item.artist}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                   <View style={styles.playlistActionRow}>
                     <TouchableOpacity style={styles.playlistIconButton} onPress={() => toggleLike(item)}>
                       <Ionicons
@@ -343,7 +346,7 @@ function LibraryScreenContent() {
                       />
                     </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             }}
             ListEmptyComponent={<Text style={{ color: theme.textSecondary, marginTop: 16 }}>{t('components.no_liked_songs')}</Text>}
@@ -373,22 +376,26 @@ function LibraryScreenContent() {
               <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('library.saved')}</Text>
               <View style={styles.savedMediaGrid}>
                 {savedMedia.map((item) => (
-                  <TouchableOpacity
+                  <View
                     key={`saved_${item.type}_${item.id}`}
                     style={[styles.savedMediaItem, { backgroundColor: theme.surface, borderColor: theme.border }]}
-                    onPress={() => handleSavedMediaPress(item)}
-                    onLongPress={() => handleRemoveSavedMedia(`saved_${item.type}_${item.id}`)}
                   >
-                    <Image source={{ uri: item.image }} style={styles.savedMediaImage} contentFit="cover" />
-                    <Text style={[styles.savedMediaTitle, { color: theme.textPrimary }]} numberOfLines={2}>{item.title}</Text>
-                    <Text style={[styles.savedMediaMeta, { color: theme.textSecondary }]}>{t(`media.${item.type}`)}</Text>
+                    <TouchableOpacity
+                      style={styles.savedMediaContent}
+                      onPress={() => handleSavedMediaPress(item)}
+                      onLongPress={() => handleRemoveSavedMedia(`saved_${item.type}_${item.id}`)}
+                    >
+                      <Image source={{ uri: item.image }} style={styles.savedMediaImage} contentFit="cover" />
+                      <Text style={[styles.savedMediaTitle, { color: theme.textPrimary }]} numberOfLines={2}>{item.title}</Text>
+                      <Text style={[styles.savedMediaMeta, { color: theme.textSecondary }]}>{t(`media.${item.type}`)}</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.savedMediaRemove}
                       onPress={() => handleRemoveSavedMedia(`saved_${item.type}_${item.id}`)}
                     >
                       <Ionicons name="close-circle" size={20} color="#ff4444" />
                     </TouchableOpacity>
-                  </TouchableOpacity>
+                  </View>
                 ))}
               </View>
             </>
@@ -450,42 +457,46 @@ function LibraryScreenContent() {
               const isActiveTrack = currentTrack?.id?.toString() === item.id?.toString();
               const isCurrentlyPlaying = isActiveTrack && isPlaying;
               return (
-                <TouchableOpacity
-                  onPress={() => handleTrackSelect(item, playlistTracks, index)}
-                  activeOpacity={0.75}
+                <View
                   style={[
                     styles.playlistTrackRow,
                     { backgroundColor: theme.surface, borderColor: isActiveTrack ? theme.accent : theme.border },
                     isActiveTrack && { borderWidth: 1.5 },
                   ]}
                 >
-                  <View style={styles.playlistArtWrapper}>
-                    <Image
-                      source={{ uri: item.images?.large || item.albumCover }}
-                      style={styles.playlistAlbumArt}
-                      contentFit="cover"
-                    />
-                    {isActiveTrack && (
-                      <View style={[styles.playlistArtOverlay, { backgroundColor: '#000000aa' }]}>
-                        <Ionicons
-                          name={isCurrentlyPlaying ? 'musical-notes' : 'pause'}
-                          size={18}
-                          color={theme.accent}
-                        />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.playlistTrackInfo}>
-                    <Text
-                      style={[styles.playlistTrackTitle, { color: isActiveTrack ? theme.accent : theme.textPrimary }]}
-                      numberOfLines={1}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text style={[styles.playlistTrackArtist, { color: theme.textSecondary }]} numberOfLines={1}>
-                      {item.artist}
-                    </Text>
-                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleTrackSelect(item, playlistTracks, index)}
+                    activeOpacity={0.75}
+                    style={styles.playlistTrackMain}
+                  >
+                    <View style={styles.playlistArtWrapper}>
+                      <Image
+                        source={{ uri: item.images?.large || item.albumCover }}
+                        style={styles.playlistAlbumArt}
+                        contentFit="cover"
+                      />
+                      {isActiveTrack && (
+                        <View style={[styles.playlistArtOverlay, { backgroundColor: '#000000aa' }]}>
+                          <Ionicons
+                            name={isCurrentlyPlaying ? 'musical-notes' : 'pause'}
+                            size={18}
+                            color={theme.accent}
+                          />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.playlistTrackInfo}>
+                      <Text
+                        style={[styles.playlistTrackTitle, { color: isActiveTrack ? theme.accent : theme.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text style={[styles.playlistTrackArtist, { color: theme.textSecondary }]} numberOfLines={1}>
+                        {item.artist}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                   <View style={styles.playlistActionRow}>
                     <TouchableOpacity style={styles.playlistIconButton} onPress={() => toggleLike(item)}>
                       <Ionicons
@@ -498,7 +509,7 @@ function LibraryScreenContent() {
                       <Ionicons name="trash" size={20} color="#ff4444" />
                     </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             }}
             ListEmptyComponent={<Text style={{ color: theme.textSecondary, marginTop: 16 }}>{t('components.no_tracks_playlist')}</Text>}
@@ -753,6 +764,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     padding: 10,
   },
+  playlistTrackMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   playlistArtWrapper: {
     position: 'relative',
     marginRight: 14,
@@ -801,6 +817,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 10,
     position: 'relative',
+  },
+  savedMediaContent: {
+    flex: 1,
   },
   savedMediaImage: {
     width: '100%',

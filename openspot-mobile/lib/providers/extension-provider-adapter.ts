@@ -1,6 +1,6 @@
 import type { Album, Artist, PlaylistSearchItem, SearchParams, SearchResponse, Track } from '@/types/music';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
-import { extensionCapabilityNames, type InstalledExtension } from '@/lib/extensions/extension-types';
+import { extensionCapabilityNames, getExtensionCompatibilityError, type InstalledExtension } from '@/lib/extensions/extension-types';
 import { ProviderRegistry, type ProviderAdapter, type ProviderCapability } from './provider-registry';
 import { getExtensionCapabilityOverrides, type ExtensionCapabilityOverrides } from './extension-capability-settings';
 
@@ -108,7 +108,7 @@ export async function syncExtensionProviders(appVersion?: string): Promise<void>
   registeredExtensionProviders.clear();
   for (const extension of installed) {
     const types = new Set([...(extension.types ?? []), ...extensionCapabilityNames(extension.capabilities)]);
-    if (!extension.enabled || (!extension.has_metadata_provider && !types.has('metadata_provider'))) continue;
+    if (!extension.enabled || getExtensionCompatibilityError(extension, appVersion) || (!extension.has_metadata_provider && !types.has('metadata_provider'))) continue;
     ProviderRegistry.register(createExtensionProviderAdapter(extension, overrides[extension.id]));
     registeredExtensionProviders.add(extension.id);
   }

@@ -14,6 +14,7 @@ export interface InstalledExtension {
   enabled?: boolean;
   error?: string;
   health?: ExtensionHealthStatus;
+  min_app_version?: string;
   capabilities?: ExtensionCapabilities;
   permissions?: string[];
   has_metadata_provider?: boolean;
@@ -32,6 +33,33 @@ export function hasExtensionCapability(extension: InstalledExtension, name: stri
   const capabilities = extension.capabilities;
   if (Array.isArray(capabilities)) return capabilities.includes(name);
   return Boolean(capabilities && typeof capabilities[name] === 'boolean' && capabilities[name]);
+}
+
+function versionParts(value: string): number[] {
+  const match = value.trim().match(/\d+(?:\.\d+)*/);
+  return match ? match[0].split('.').map((part) => Number(part) || 0) : [];
+}
+
+export function compareExtensionVersions(left: string, right: string): number {
+  const leftParts = versionParts(left);
+  const rightParts = versionParts(right);
+  for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+    const leftPart = leftParts[index] ?? 0;
+    const rightPart = rightParts[index] ?? 0;
+    if (leftPart > rightPart) return 1;
+    if (leftPart < rightPart) return -1;
+  }
+  return 0;
+}
+
+export function getExtensionCompatibilityError(extension: InstalledExtension, appVersion?: string): string | null {
+  const minVersion = extension.min_app_version?.trim();
+  const installedVersion = appVersion?.trim();
+  if (minVersion && installedVersion && compareExtensionVersions(installedVersion, minVersion) < 0) {
+    return `requires app ${minVersion} or later (installed: ${installedVersion})`;
+  }
+  const nativeError = extension.error?.trim();
+  return nativeError || null;
 }
 
 export interface RepositoryExtension {

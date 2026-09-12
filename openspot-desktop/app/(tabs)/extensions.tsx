@@ -22,7 +22,7 @@ import { extensionCapabilityNames, type ExtensionHealthResult, type InstalledExt
 type ExtensionPage = 'store' | 'installed' | 'priority' | 'fallback';
 
 const DEFAULT_REPOSITORY_URL = process.env.EXPO_PUBLIC_EXTENSION_REGISTRY_URL?.trim() ?? '';
-const APP_VERSION = Constants.expoConfig?.version ?? '3.1.5';
+const APP_VERSION = Constants.expoConfig?.version ?? '4.9.1';
 
 function extensionTitle(extension: InstalledExtension | RepositoryExtension): string {
   return ('display_name' in extension && extension.display_name) || extension.name || extension.id;
