@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Track } from '../types/music';
+import { isRecord, normalizeStoredTrack, parseStoredJSON } from '@/lib/storage-validation';
 
 interface QueueState {
   tracks: Track[];
@@ -31,9 +32,27 @@ export function useMusicQueue() {
       try {
         const stored = await AsyncStorage.getItem(QUEUE_STORAGE_KEY);
         if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed.tracks && typeof parsed.currentIndex === 'number') {
-            setQueue(parsed);
+          const parsed = parseStoredJSON<unknown>(stored, QUEUE_STORAGE_KEY, null);
+          if (isRecord(parsed) && Array.isArray(parsed.tracks) && typeof parsed.currentIndex === 'number') {
+            const tracks = parsed.tracks.flatMap((value) => {
+              const track = normalizeStoredTrack(value);
+              return track ? [track] : [];
+            });
+            const originalTracks = Array.isArray(parsed.originalTracks)
+              ? parsed.originalTracks.flatMap((value) => {
+                  const track = normalizeStoredTrack(value);
+                  return track ? [track] : [];
+                })
+              : tracks;
+            const currentIndex = tracks.length === 0
+              ? -1
+              : Math.min(Math.max(Math.trunc(parsed.currentIndex), 0), tracks.length - 1);
+            setQueue({
+              tracks,
+              currentIndex,
+              isShuffled: parsed.isShuffled === true,
+              originalTracks: originalTracks.length > 0 ? originalTracks : tracks,
+            });
           }
         }
       } catch (error) {

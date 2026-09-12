@@ -15,8 +15,34 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { importSpotifyPlaylist } from '@/lib/spotify-import';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { isRecord, parseStoredJSON } from '@/lib/storage-validation';
 
-export default function LibraryScreen() {
+interface SavedMediaItem {
+  type: 'album' | 'artist' | 'playlist';
+  id: string;
+  title: string;
+  image: string;
+  totalSongs?: number;
+}
+
+function normalizeSavedMedia(value: unknown): SavedMediaItem | null {
+  if (!isRecord(value)) return null;
+  const type = value.type;
+  if (type !== 'album' && type !== 'artist' && type !== 'playlist') return null;
+  const id = typeof value.id === 'string' || typeof value.id === 'number' ? String(value.id) : '';
+  const title = typeof value.title === 'string' ? value.title : '';
+  if (!id || !title.trim()) return null;
+  return {
+    type,
+    id,
+    title,
+    image: typeof value.image === 'string' ? value.image : '',
+    totalSongs: typeof value.totalSongs === 'number' && Number.isFinite(value.totalSongs) ? value.totalSongs : undefined,
+  };
+}
+
+function LibraryScreenContent() {
   const { t } = useTranslation();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -40,7 +66,7 @@ export default function LibraryScreen() {
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
   const [showLikedSongs, setShowLikedSongs] = useState(false);
-  const [savedMedia, setSavedMedia] = useState<any[]>([]);
+  const [savedMedia, setSavedMedia] = useState<SavedMediaItem[]>([]);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importUrl, setImportUrl] = useState('');
   const [importName, setImportName] = useState('');
@@ -53,56 +79,81 @@ export default function LibraryScreen() {
     const savedKeys = allKeys.filter(key => key.startsWith('saved_'));
     const savedItems = await Promise.all(
       savedKeys.map(async (key) => {
-        const data = await AsyncStorage.getItem(key);
-        return data ? JSON.parse(data) : null;
+        try {
+          const data = await AsyncStorage.getItem(key);
+          return normalizeSavedMedia(parseStoredJSON<unknown>(data, key, null));
+        } catch (error) {
+          console.warn(`[Library] Failed to load saved media ${key}`, error);
+          return null;
+        }
       })
     );
-    setSavedMedia(savedItems.filter(Boolean));
+    setSavedMedia(savedItems.flatMap((item) => item ? [item] : []));
   }, []);
 
   const handleRemoveSavedMedia = async (key: string) => {
-    await AsyncStorage.removeItem(key);
-    fetchSavedMedia();
+    try {
+      await AsyncStorage.removeItem(key);
+      await fetchSavedMedia();
+    } catch (error) {
+      console.warn(`[Library] Failed to remove saved media ${key}`, error);
+    }
   };
 
-  const handleSavedMediaPress = (item: any) => {
+  const handleSavedMediaPress = (item: SavedMediaItem) => {
     router.push(`/media/${item.type}/${item.id}?title=${encodeURIComponent(item.title)}&image=${encodeURIComponent(item.image)}`);
   };
 
   const refreshSelectedPlaylistTracks = async (playlistName: string) => {
-    const updated = (await PlaylistStorage.getPlaylists()).find(pl => pl.name === playlistName);
-    if (!updated) {
+    try {
+      const updated = (await PlaylistStorage.getPlaylists()).find(pl => pl.name === playlistName);
+      if (!updated) {
+        setSelectedPlaylist(null);
+        setPlaylistTracks([]);
+        return;
+      }
+      setSelectedPlaylist(updated);
+      const tracks = await PlaylistStorage.getPlaylistTracks(updated);
+      setPlaylistTracks(tracks);
+    } catch (error) {
+      console.warn(`[Library] Failed to load playlist ${playlistName}`, error);
       setSelectedPlaylist(null);
       setPlaylistTracks([]);
-      return;
     }
-    setSelectedPlaylist(updated);
-    const tracks = await PlaylistStorage.getPlaylistTracks(updated);
-    setPlaylistTracks(tracks);
   };
 
   const fetchPlaylists = useCallback(async () => {
-    const pls = await PlaylistStorage.getPlaylists();
-    
-    const filteredPlaylists = pls.filter(pl => pl.name !== 'offline');
-    setPlaylists(filteredPlaylists);
+    try {
+      const pls = await PlaylistStorage.getPlaylists();
+      const filteredPlaylists = pls.filter(pl => pl.name !== 'offline');
+      setPlaylists(filteredPlaylists);
 
-    const covers: Record<string, string> = {};
-    for (const pl of filteredPlaylists) {
-      if (pl.trackIds.length > 0) {
-        const track = await PlaylistStorage.getTrackData(pl.trackIds[0]);
-        if (track && track.images) {
-          covers[pl.name] = MusicAPI.getOptimalImage(track.images);
+      const covers: Record<string, string> = {};
+      for (const pl of filteredPlaylists) {
+        if (pl.trackIds.length > 0) {
+          const track = await PlaylistStorage.getTrackData(pl.trackIds[0]);
+          if (track && track.images) {
+            covers[pl.name] = MusicAPI.getOptimalImage(track.images);
+          }
         }
       }
+      setPlaylistCovers(covers);
+    } catch (error) {
+      console.warn('[Library] Failed to load playlists', error);
+      setPlaylists([]);
+      setPlaylistCovers({});
     }
-    setPlaylistCovers(covers);
   }, []);
 
   useFocusEffect(
     React.useCallback(() => {
-      fetchPlaylists();
-      fetchSavedMedia();
+      let active = true;
+      void Promise.all([fetchPlaylists(), fetchSavedMedia()]).catch((error) => {
+        if (active) console.warn('[Library] Focus refresh failed', error);
+      });
+      return () => {
+        active = false;
+      };
     }, [fetchPlaylists, fetchSavedMedia])
   );
 
@@ -116,14 +167,18 @@ export default function LibraryScreen() {
 
   const handleCreatePlaylistSubmit = async () => {
     if (!newPlaylistName.trim()) return;
-    await PlaylistStorage.addPlaylist({
-      name: newPlaylistName.trim(),
-      cover: '',
-      trackIds: [],
-    });
-    setNewPlaylistName('');
-    setShowCreateModal(false);
-    fetchPlaylists();
+    try {
+      await PlaylistStorage.addPlaylist({
+        name: newPlaylistName.trim(),
+        cover: '',
+        trackIds: [],
+      });
+      setNewPlaylistName('');
+      setShowCreateModal(false);
+      await fetchPlaylists();
+    } catch (error) {
+      console.warn('[Library] Failed to create playlist', error);
+    }
   };
 
   const handleImportSpotify = async () => {
@@ -159,19 +214,27 @@ export default function LibraryScreen() {
   };
 
   const handleRemoveTrackFromPlaylist = async (trackId: string, playlistName: string) => {
-    await PlaylistStorage.removeTrackFromPlaylist(trackId, playlistName);
-    await fetchPlaylists();
-    if (selectedPlaylist) await refreshSelectedPlaylistTracks(playlistName);
+    try {
+      await PlaylistStorage.removeTrackFromPlaylist(trackId, playlistName);
+      await fetchPlaylists();
+      if (selectedPlaylist) await refreshSelectedPlaylistTracks(playlistName);
+    } catch (error) {
+      console.warn(`[Library] Failed to remove track ${trackId}`, error);
+    }
   };
 
   const handlePlaylistPlay = async (playlist: Playlist, shuffle = false) => {
-    const tracks = await PlaylistStorage.getPlaylistTracks(playlist);
-    if (tracks.length > 0) {
-      let playTracks = tracks;
-      if (shuffle) {
-        playTracks = [...tracks].sort(() => Math.random() - 0.5);
+    try {
+      const tracks = await PlaylistStorage.getPlaylistTracks(playlist);
+      if (tracks.length > 0) {
+        let playTracks = tracks;
+        if (shuffle) {
+          playTracks = [...tracks].sort(() => Math.random() - 0.5);
+        }
+        handleTrackSelect(playTracks[0], playTracks, 0);
       }
-      handleTrackSelect(playTracks[0], playTracks, 0);
+    } catch (error) {
+      console.warn(`[Library] Failed to play playlist ${playlist.name}`, error);
     }
   };
 
@@ -193,10 +256,14 @@ export default function LibraryScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete', style: 'destructive', onPress: async () => {
-            const all = await PlaylistStorage.getPlaylists();
-            const updated = all.filter(pl => pl.name !== playlist.name);
-            await PlaylistStorage.savePlaylists(updated);
-            fetchPlaylists();
+            try {
+              const all = await PlaylistStorage.getPlaylists();
+              const updated = all.filter(pl => pl.name !== playlist.name);
+              await PlaylistStorage.savePlaylists(updated);
+              await fetchPlaylists();
+            } catch (error) {
+              console.warn(`[Library] Failed to delete playlist ${playlist.name}`, error);
+            }
           }
         }
       ]
@@ -534,6 +601,14 @@ export default function LibraryScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+export default function LibraryScreen() {
+  return (
+    <ErrorBoundary scope="Library">
+      <LibraryScreenContent />
+    </ErrorBoundary>
   );
 }
 

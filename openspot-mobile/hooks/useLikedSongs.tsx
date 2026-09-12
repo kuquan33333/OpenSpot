@@ -1,8 +1,31 @@
 import { useState, useEffect, useCallback, useMemo, createContext, useContext, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Track } from '../types/music';
+import { isRecord, parseStoredJSON } from '@/lib/storage-validation';
 
 const LIKED_SONGS_STORAGE_KEY = 'openspot_liked_songs';
+
+function normalizeLikedSong(value: unknown): LikedSong | null {
+  if (!isRecord(value)) return null;
+  const id = typeof value.id === 'string' || (typeof value.id === 'number' && Number.isFinite(value.id)) ? value.id : null;
+  if (id === null || typeof value.title !== 'string' || typeof value.artist !== 'string') return null;
+  const images = isRecord(value.images) ? value.images : {};
+  return {
+    id,
+    provider: typeof value.provider === 'string' ? value.provider : undefined,
+    title: value.title,
+    artist: value.artist,
+    albumTitle: typeof value.albumTitle === 'string' ? value.albumTitle : '',
+    duration: typeof value.duration === 'number' && Number.isFinite(value.duration) ? value.duration : 0,
+    images: {
+      small: typeof images.small === 'string' ? images.small : '',
+      thumbnail: typeof images.thumbnail === 'string' ? images.thumbnail : '',
+      large: typeof images.large === 'string' ? images.large : '',
+      back: images.back === null ? null : typeof images.back === 'string' ? images.back : null,
+    },
+    likedAt: typeof value.likedAt === 'string' ? value.likedAt : new Date(0).toISOString(),
+  };
+}
 
 interface LikedSong {
   id: string | number;
@@ -49,8 +72,11 @@ export function LikedSongsProvider({ children }: LikedSongsProviderProps) {
       try {
         const savedLikedSongs = await AsyncStorage.getItem(LIKED_SONGS_STORAGE_KEY);
         if (savedLikedSongs) {
-          const parsed = JSON.parse(savedLikedSongs) as LikedSong[];
-          setLikedSongs(parsed);
+          const parsed = parseStoredJSON<unknown>(savedLikedSongs, LIKED_SONGS_STORAGE_KEY, []);
+          setLikedSongs(Array.isArray(parsed) ? parsed.flatMap((value) => {
+            const song = normalizeLikedSong(value);
+            return song ? [song] : [];
+          }) : []);
         }
       } catch (error) {
         console.error('Failed to load liked songs from AsyncStorage:', error);
@@ -164,7 +190,7 @@ export function LikedSongsProvider({ children }: LikedSongsProviderProps) {
       releaseDateStream: '',
       releaseDateDownload: '',
       maximumChannelCount: 2,
-      images: song.images,
+       images: song.images,
       isrc: ''
     }));
   }, [likedSongs]);
@@ -199,4 +225,4 @@ export function useLikedSongs(): LikedSongsContextType {
     throw new Error('useLikedSongs must be used within a LikedSongsProvider');
   }
   return context;
-} 
+}

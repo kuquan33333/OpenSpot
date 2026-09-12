@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Track } from '@/types/music';
 import { MusicAPI } from '@/lib/music-api';
+import { isRecord, normalizeStoredTrack, parseStoredJSON } from '@/lib/storage-validation';
 
 export interface Playlist {
   name: string;
@@ -14,7 +15,20 @@ const TRACK_DATA_KEY = 'user_track_data';
 export const PlaylistStorage = {
   async getPlaylists(): Promise<Playlist[]> {
     const data = await AsyncStorage.getItem(PLAYLISTS_KEY);
-    return data ? JSON.parse(data) : [];
+    const parsed = parseStoredJSON<unknown>(data, PLAYLISTS_KEY, []);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.flatMap((value): Playlist[] => {
+      if (!isRecord(value) || typeof value.name !== 'string' || !value.name.trim()) return [];
+      const trackIds = Array.isArray(value.trackIds)
+        ? value.trackIds.filter((id): id is string | number => typeof id === 'string' || typeof id === 'number').map(String)
+        : [];
+      return [{
+        name: value.name.trim(),
+        cover: typeof value.cover === 'string' ? value.cover : '',
+        trackIds: [...new Set(trackIds)],
+      }];
+    });
   },
   async savePlaylists(playlists: Playlist[]) {
     await AsyncStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
@@ -65,7 +79,7 @@ export const PlaylistStorage = {
     try {
       const key = `${TRACK_DATA_KEY}_${trackId}`;
       const data = await AsyncStorage.getItem(key);
-      return data ? JSON.parse(data) : null;
+      return normalizeStoredTrack(parseStoredJSON<unknown>(data, key, null));
     } catch (error) {
       console.error('Failed to get track data:', error);
       return null;
@@ -81,7 +95,7 @@ export const PlaylistStorage = {
         continue;
       }
       try {
-        const track = await MusicAPI.resolveTrackById(id);
+        const track = normalizeStoredTrack(await MusicAPI.resolveTrackById(id));
         if (track) {
           tracks.push(track);
           await this.saveTrackData(track);
