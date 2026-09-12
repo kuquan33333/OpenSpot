@@ -10,26 +10,18 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { HorizontalTrackList } from '@/components/HorizontalTrackList';
-import { useRouter , useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { COUNTRY_NAMES } from '@/constants/countryNames';
 import { useTranslation } from 'react-i18next';
 import { useThemeMode, ThemeMode } from '@/hooks/theme-mode';
-import { useConnectivity } from '@/hooks/useConnectivity';
 import { GreetingHeader } from '@/components/GreetingHeader';
 import { QuickActions } from '@/components/QuickActions';
 import { SectionHeader } from '@/components/SectionHeader';
 
-const KWORD_URL = 'https://kworb.net/spotify/';
-const REGION_URL_MAP_KEY = 'openspot_region_url_map_v1';
-const REGION_URL_MAP_TIMESTAMP_KEY = 'openspot_region_url_map_ts_v1';
-const REGION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const TRENDING_TRACKS_CACHE_KEY = 'TRENDING_TRACKS_CACHE_V1';
 const REGION_OVERRIDE_KEY = 'openspot_region_override_v1';
 const LANGUAGE_KEY = 'openspot_language_v1';
 const FIRST_RUN_SETUP_KEY = 'openspot_first_run_setup_done_v1';
-const TRENDING_ENABLED_KEY = 'openspot_trending_enabled_v1';
 
 type SetupPickerOption = string | { label: string; value: string; nativeLabel: string };
 
@@ -55,15 +47,11 @@ export default function HomeScreen() {
   const [currentView, setCurrentView] = React.useState<'home' | 'search'>('home');
   const searchState = useSearch();
   const { clearResults } = searchState;
-  const { handleTrackSelect, musicQueue, isPlaying, currentTrack } = useContext(MusicPlayerContext);
-  const [trendingTracks, setTrendingTracks] = useState<Track[]>([]);
+  const { handleTrackSelect, isPlaying, currentTrack } = useContext(MusicPlayerContext);
+  const [homeSections, setHomeSections] = useState<Awaited<ReturnType<typeof MusicAPI.getHomeSections>>>([]);
+  const [homeLoading, setHomeLoading] = useState(true);
   const { getLikedSongsAsTrack } = useLikedSongs();
   const likedTracks = getLikedSongsAsTrack();
-  const [detectedCountry, setDetectedCountry] = useState('your country');
-  const [regionOverride, setRegionOverride] = useState<string>('auto');
-  const [countryLoading, setCountryLoading] = useState(true);
-  const [regionUrlMap, setRegionUrlMap] = useState<Record<string, string>>({});
-  const [trendingCache, setTrendingCache] = useState<Record<string, Track>>({});
   const [recentlyPlayedTracks, setRecentlyPlayedTracks] = useState<Track[]>([]);
   const [showFirstRunSetup, setShowFirstRunSetup] = useState(false);
   const [setupRegion, setSetupRegion] = useState<string>('auto');
@@ -72,9 +60,6 @@ export default function HomeScreen() {
   const [isSavingSetup, setIsSavingSetup] = useState(false);
   const [setupModalReady, setSetupModalReady] = useState(false);
   const [setupPicker, setSetupPicker] = useState<'language' | 'region' | null>(null);
-  const { isOffline } = useConnectivity();
-  const wasOfflineRef = React.useRef(false);
-  const [trendingEnabled, setTrendingEnabled] = useState<boolean>(true);
   const scrollRef = useRef<ScrollView>(null);
 
   const languageOptions: { label: string; value: string; nativeLabel: string }[] = [
@@ -96,31 +81,10 @@ export default function HomeScreen() {
     let interactionTask: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
     const restoreLocalState = async () => {
       try {
-        const [cacheStr, mapStr, done, stored, storedRegion, timestamp] = await Promise.all([
-          AsyncStorage.getItem(TRENDING_TRACKS_CACHE_KEY),
-          AsyncStorage.getItem(REGION_URL_MAP_KEY),
+        const [done] = await Promise.all([
           AsyncStorage.getItem(FIRST_RUN_SETUP_KEY),
-          AsyncStorage.getItem(TRENDING_ENABLED_KEY),
-          AsyncStorage.getItem(REGION_OVERRIDE_KEY),
-          AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY),
         ]);
         if (!mounted) return;
-        if (cacheStr) {
-          try {
-            const parsed = JSON.parse(cacheStr) as Record<string, Track>;
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) setTrendingCache(parsed);
-          } catch (error) {
-            console.warn('[Home] invalid trending cache ignored:', error);
-          }
-        }
-        if (mapStr) {
-          try {
-            const parsed = JSON.parse(mapStr) as Record<string, string>;
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) setRegionUrlMap(parsed);
-          } catch (error) {
-            console.warn('[Home] invalid region cache ignored:', error);
-          }
-        }
         if (!done) {
           // Wait for the navigation transition to finish before presenting a
           // native Modal. This prevents the first-run controls from appearing
@@ -131,8 +95,6 @@ export default function HomeScreen() {
             setShowFirstRunSetup(true);
           });
         }
-        if (stored !== null) setTrendingEnabled(stored === 'true');
-        if (storedRegion && storedRegion.trim()) setRegionOverride(storedRegion);
       } catch (e) {
         console.error('[Home] failed to restore local state:', e);
         if (mounted) {
@@ -152,82 +114,8 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-    const refreshRegionMap = async () => {
-      try {
-        const timestamp = await AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY);
-        const parsedTimestamp = timestamp ? Number.parseInt(timestamp, 10) : 0;
-        if (parsedTimestamp > 0 && Date.now() - parsedTimestamp <= REGION_CACHE_TTL_MS) return;
-        const res = await fetch(KWORD_URL);
-        if (!res.ok) throw new Error(`Region source returned HTTP ${res.status}`);
-        const html = await res.text();
-        const freshMap: Record<string, string> = {};
-        const regex = /<tr><td class="mp text">([^<]+)<\/td>\s*<td class="mp text">[\s\S]*?<a href="([^"]+)">Weekly<\/a>/g;
-        let match;
-        while ((match = regex.exec(html)) !== null) {
-          freshMap[match[1].trim()] = `https://kworb.net/spotify/${match[2]}`;
-        }
-        if (!mounted || Object.keys(freshMap).length === 0) return;
-        setRegionUrlMap(freshMap);
-        await AsyncStorage.setItem(REGION_URL_MAP_KEY, JSON.stringify(freshMap));
-        await AsyncStorage.setItem(REGION_URL_MAP_TIMESTAMP_KEY, Date.now().toString());
-      } catch (error) {
-        console.warn('[Home] region refresh unavailable; cached/auto mode remains active:', error);
-      }
-    };
-    void refreshRegionMap();
-    return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
     setSetupTheme(mode);
   }, [mode]);
-
-  useEffect(() => {
-    if (!isOffline && wasOfflineRef.current) {
-      void (async () => {
-        try {
-          const timestamp = await AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY);
-          const isStale = !timestamp || Date.now() - parseInt(timestamp, 10) > REGION_CACHE_TTL_MS;
-          if (!isStale) return;
-
-          const res = await fetch(KWORD_URL);
-          const html = await res.text();
-          const map: Record<string, string> = {};
-          const regex = /<tr><td class="mp text">([^<]+)<\/td>\s*<td class="mp text">[\s\S]*?<a href="([^"]+)">Weekly<\/a>/g;
-          let match;
-          while ((match = regex.exec(html)) !== null) {
-            const name = match[1].trim();
-            map[name] = `https://kworb.net/spotify/${match[2]}`;
-          }
-          setRegionUrlMap(map);
-          await AsyncStorage.setItem(REGION_URL_MAP_KEY, JSON.stringify(map));
-          await AsyncStorage.setItem(REGION_URL_MAP_TIMESTAMP_KEY, Date.now().toString());
-        } catch (e) {
-          console.error('Region URL map re-fetch error:', e);
-        }
-      })();
-      if (regionOverride === 'auto') {
-        void (async () => {
-          try {
-            setCountryLoading(true);
-            const res = await fetch('https://ipinfo.io/json');
-            const data = await res.json();
-            if (data && data.country && COUNTRY_NAMES[data.country]) {
-              setDetectedCountry(COUNTRY_NAMES[data.country]);
-            } else {
-              setDetectedCountry('your country');
-            }
-          } catch (e) {
-            console.error('Country re-fetch error:', e);
-          } finally {
-            setCountryLoading(false);
-          }
-        })();
-      }
-    }
-    wasOfflineRef.current = isOffline;
-  }, [isOffline, regionOverride]);
 
   const loadRecentlyPlayed = React.useCallback(async () => {
     try {
@@ -244,119 +132,22 @@ export default function HomeScreen() {
   }, [loadRecentlyPlayed]);
 
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+    const loadHome = async () => {
+      setHomeLoading(true);
       try {
-        const res = await fetch('https://ipinfo.io/json');
-        const data = await res.json();
-        if (data && data.country && COUNTRY_NAMES[data.country]) {
-          setDetectedCountry(COUNTRY_NAMES[data.country]);
-        } else {
-          setDetectedCountry('your country');
-        }
-      } catch (e) {
-        console.error('Country fetch error:', e);
-        setDetectedCountry('your country');
+        const sections = await MusicAPI.getHomeSections();
+        if (mounted) setHomeSections(sections);
+      } catch (error) {
+        console.error('[Home] Extension recommendations unavailable:', error);
+        if (mounted) setHomeSections([]);
       } finally {
-        setCountryLoading(false);
+        if (mounted) setHomeLoading(false);
       }
-    })();
+    };
+    void loadHome();
+    return () => { mounted = false; };
   }, []);
-
-  const activeRegion = regionOverride === 'auto' ? detectedCountry : regionOverride;
-  const formattedActiveRegion = activeRegion
-    .split(' ')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchTrendingTracks = async (list: string[]) => {
-
-      let cache = { ...trendingCache };
-      const tracks: Track[] = [];
-      let cacheChanged = false;
-
-
-      for (const entry of list) {
-        if (cache[entry]) {
-          tracks.push(cache[entry]);
-        }
-      }
-
-
-      if (isMounted) {
-        setTrendingTracks([...tracks]);
-      }
-
-
-      for (const entry of list) {
-        if (!cache[entry]) {
-          try {
-            const res = await MusicAPI.searchTracks(entry);
-            if (res.tracks && res.tracks.length > 0) {
-              cache[entry] = res.tracks[0];
-              tracks.push(res.tracks[0]);
-              cacheChanged = true;
-
-
-              if (isMounted) {
-                setTrendingTracks([...tracks]);
-              }
-            } else {
-              console.warn(`[Trending] No results for: ${entry}`);
-            }
-          } catch (e) {
-            console.error(`[Trending] Error fetching "${entry}":`, e);
-          }
-        }
-      }
-
-      if (cacheChanged) {
-        setTrendingCache(cache);
-        try {
-          await AsyncStorage.setItem(TRENDING_TRACKS_CACHE_KEY, JSON.stringify(cache));
-        } catch (e) {
-          console.error('Failed to save trending tracks cache:', e);
-        }
-      }
-    };
-
-    const fetchKworbWeekly = async (weeklyUrl: string) => {
-      try {
-        const res = await fetch(weeklyUrl);
-        const html = await res.text();
-        const trackRegex = /<td class="text mp"><div><a href="[^"]+">([^<]+)<\/a> - <a href="[^"]+">([^<]+)<\/a>/g;
-        const searchQueries: string[] = [];
-        let match;
-        while ((match = trackRegex.exec(html)) !== null) {
-          searchQueries.push(match[2].trim());
-        }
-        fetchTrendingTracks(searchQueries.slice(0, 50));
-      } catch (e) {
-        console.error('Failed to fetch kworb weekly chart:', e);
-        if (isMounted) setTrendingTracks([]);
-      }
-    };
-
-    if (!countryLoading && activeRegion && activeRegion !== 'your country') {
-      const activeKey = activeRegion.toLowerCase();
-      const regionKey = Object.keys(regionUrlMap).find(k => k.toLowerCase() === activeKey);
-      if (regionKey && regionUrlMap[regionKey]) {
-        fetchKworbWeekly(regionUrlMap[regionKey]);
-      } else {
-        const globalKey = Object.keys(regionUrlMap).find(k => k.toLowerCase() === 'global');
-        if (globalKey && regionUrlMap[globalKey]) {
-          fetchKworbWeekly(regionUrlMap[globalKey]);
-        } else {
-          if (isMounted) setTrendingTracks([]);
-        }
-      }
-    } else {
-      if (isMounted) setTrendingTracks([]);
-    }
-    return () => { isMounted = false; };
-  }, [activeRegion, countryLoading, regionUrlMap, trendingCache]);
 
   const handleViewChange = (view: 'home' | 'search') => {
     setCurrentView(view);
@@ -382,7 +173,6 @@ export default function HomeScreen() {
         AsyncStorage.setItem(FIRST_RUN_SETUP_KEY, '1'),
       ]);
       setMode(setupTheme);
-      setRegionOverride(setupRegion);
       setSetupPicker(null);
       setShowFirstRunSetup(false);
       // Applying local preferences is intentionally after dismissing setup;
@@ -445,28 +235,34 @@ export default function HomeScreen() {
               onLibrary={handleLibraryNav}
             />
 
-            {trendingEnabled && (
-              <View>
-                <SectionHeader
-                  title={t('home.trending_in', { region: countryLoading ? '...' : (formattedActiveRegion || t('home.your_country')) })}
-                />
-                {trendingTracks.length > 0 ? (
-                  <HorizontalTrackList
-                    title=""
-                    tracks={trendingTracks}
-                    onTrackSelect={handleHomeTrackSelect}
-                    isPlaying={isPlaying}
-                    currentTrack={currentTrack}
-                  />
-                ) : (
-                  Object.keys(regionUrlMap).length > 0 && (
-                    <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 16 }}>
-                      {t('home.loading_trending')}
-                    </Text>
-                  )
-                )}
+            {homeLoading && (
+              <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 16 }}>
+                {t('home.loading_recommendations', { defaultValue: 'Loading recommendations from Extensions…' })}
+              </Text>
+            )}
+            {!homeLoading && homeSections.length === 0 && (
+              <View style={[styles.emptyBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Ionicons name="extension-puzzle-outline" size={24} color={theme.textSecondary} />
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  {t('home.no_extension_recommendations', { defaultValue: 'Enable an Extension with search and home capabilities to see recommendations.' })}
+                </Text>
+                <TouchableOpacity onPress={() => router.push('/extensions')}>
+                  <Text style={{ color: theme.accent, fontWeight: '700', marginTop: 8 }}>{t('common.open', { defaultValue: 'Open Extensions' })}</Text>
+                </TouchableOpacity>
               </View>
             )}
+            {homeSections.map((section) => (
+              <View key={`${section.providerId}:${section.id}`} style={{ marginTop: 16 }}>
+                <SectionHeader title={t(`home.section_${section.id}`, { defaultValue: section.id })} />
+                <HorizontalTrackList
+                  title=""
+                  tracks={section.tracks}
+                  onTrackSelect={handleHomeTrackSelect}
+                  isPlaying={isPlaying}
+                  currentTrack={currentTrack}
+                />
+              </View>
+            ))}
 
             <View style={{ marginTop: 16 }}>
               <SectionHeader title={t('home.liked_songs')} onSeeAll={handleLibraryNav} />
@@ -589,7 +385,7 @@ export default function HomeScreen() {
                 {setupPicker === 'language' ? t('settings.language') : t('settings.region')}
               </Text>
               <FlatList<SetupPickerOption>
-                data={(setupPicker === 'language' ? languageOptions : ['auto', ...Object.keys(regionUrlMap)]) as SetupPickerOption[]}
+                data={(setupPicker === 'language' ? languageOptions : ['auto']) as SetupPickerOption[]}
                 keyExtractor={(item) => typeof item === 'string' ? item : item.value}
                 renderItem={({ item }) => {
                   const value = typeof item === 'string' ? item : item.value;

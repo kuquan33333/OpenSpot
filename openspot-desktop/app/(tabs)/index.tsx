@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, StatusBar, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSearch } from '@/hooks/useSearch';
@@ -6,7 +6,6 @@ import { TopBar } from '@/components/TopBar';
 import { MusicPlayerContext } from './_layout';
 import { MusicAPI } from '@/lib/music-api';
 import { Track } from '@/types/music';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useLikedSongs } from '@/hooks/useLikedSongs';
 import { HorizontalTrackList } from '@/components/HorizontalTrackList';
@@ -16,47 +15,11 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { COUNTRY_NAMES } from '@/constants/countryNames';
 import { useTranslation } from 'react-i18next';
 import { useThemeMode, ThemeMode } from '@/hooks/theme-mode';
-import { useConnectivity } from '@/hooks/useConnectivity';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { isRecord, parseStoredJSON } from '@/lib/storage-validation';
-
-const isTauri = () => {
-  if (typeof window === 'undefined') return false;
-  const w = window as any;
-  return (
-    window.location.protocol === 'tauri:' ||
-    window.location.hostname === 'tauri.localhost' ||
-    !!w.__TAURI__ ||
-    !!w.__TAURI_INTERNALS__ ||
-    !!w.__TAURI_METADATA__
-  );
-};
-
-const crossFetch = async (url: string, init?: RequestInit): Promise<Response> => {
-  if (isTauri()) {
-    return tauriFetch(url, {
-      method: init?.method || 'GET',
-      headers: {
-        'Content-Type': 'text/plain',
-        ...(init?.headers as Record<string, string>),
-      },
-    });
-  }
-  return fetch(url, init);
-};
-
-const KWORD_URL = 'https://kworb.net/spotify/';
-const REGION_URL_MAP_KEY = 'openspot_region_url_map_v1';
-const REGION_URL_MAP_TIMESTAMP_KEY = 'openspot_region_url_map_ts_v1';
-const REGION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const TRENDING_TRACKS_CACHE_KEY = 'TRENDING_TRACKS_CACHE_V1';
 const REGION_OVERRIDE_KEY = 'openspot_region_override_v1';
 const LANGUAGE_KEY = 'openspot_language_v1';
 const FIRST_RUN_SETUP_KEY = 'openspot_first_run_setup_done_v1';
-const TRENDING_ENABLED_KEY = 'openspot_trending_enabled_v1';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -80,15 +43,11 @@ export default function HomeScreen() {
   const [currentView, setCurrentView] = React.useState<'home' | 'search'>('home');
   const searchState = useSearch();
   const { clearResults } = searchState;
-  const { handleTrackSelect, musicQueue, isPlaying, currentTrack } = useContext(MusicPlayerContext);
-  const [trendingTracks, setTrendingTracks] = useState<Track[]>([]);
+  const { handleTrackSelect, isPlaying, currentTrack } = useContext(MusicPlayerContext);
+  const [homeSections, setHomeSections] = useState<Awaited<ReturnType<typeof MusicAPI.getHomeSections>>>([]);
+  const [homeLoading, setHomeLoading] = useState(true);
   const { getLikedSongsAsTrack } = useLikedSongs();
   const likedTracks = getLikedSongsAsTrack();
-  const [detectedCountry, setDetectedCountry] = useState('your country');
-  const [regionOverride, setRegionOverride] = useState<string>('auto');
-  const [countryLoading, setCountryLoading] = useState(true);
-  const [regionUrlMap, setRegionUrlMap] = useState<Record<string, string>>({});
-  const [trendingCache, setTrendingCache] = useState<Record<string, Track>>({});
   const [recentlyPlayedTracks, setRecentlyPlayedTracks] = useState<Track[]>([]);
   const [showFirstRunSetup, setShowFirstRunSetup] = useState(false);
   const [setupRegion, setSetupRegion] = useState<string>('auto');
@@ -97,9 +56,6 @@ export default function HomeScreen() {
   const [isSavingSetup, setIsSavingSetup] = useState(false);
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const [isRegionModalOpen, setIsRegionModalOpen] = useState(false);
-  const { isOffline } = useConnectivity();
-  const wasOfflineRef = React.useRef(false);
-  const [trendingEnabled, setTrendingEnabled] = useState<boolean>(true);
 
   const languageOptions: { label: string; value: string; nativeLabel: string }[] = [
     { label: 'English', value: 'en', nativeLabel: 'English' },
@@ -117,47 +73,15 @@ export default function HomeScreen() {
 
   
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
-        const [cacheStr, mapStr, done, stored, storedRegion, timestamp] = await Promise.all([
-          AsyncStorage.getItem(TRENDING_TRACKS_CACHE_KEY),
-          AsyncStorage.getItem(REGION_URL_MAP_KEY),
+        const [done] = await Promise.all([
           AsyncStorage.getItem(FIRST_RUN_SETUP_KEY),
-          AsyncStorage.getItem(TRENDING_ENABLED_KEY),
-          AsyncStorage.getItem(REGION_OVERRIDE_KEY),
-          AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY),
         ]);
-        const cachedTracks = parseStoredJSON<unknown>(cacheStr, TRENDING_TRACKS_CACHE_KEY, null);
-        if (isRecord(cachedTracks)) setTrendingCache(cachedTracks as Record<string, Track>);
-        const cachedRegions = parseStoredJSON<unknown>(mapStr, REGION_URL_MAP_KEY, null);
-        if (isRecord(cachedRegions)) {
-          const validRegions: Record<string, string> = {};
-          for (const [region, url] of Object.entries(cachedRegions)) {
-            if (typeof url === 'string') validRegions[region] = url;
-          }
-          setRegionUrlMap(validRegions);
-        }
         if (!done) setShowFirstRunSetup(true);
-        if (stored !== null) setTrendingEnabled(stored === 'true');
-        if (storedRegion && storedRegion.trim()) setRegionOverride(storedRegion);
-
-        const isStale = !timestamp || Date.now() - parseInt(timestamp, 10) > REGION_CACHE_TTL_MS;
-        if (isStale) {
-          const res = await crossFetch(KWORD_URL);
-          const html = await res.text();
-          const freshMap: Record<string, string> = {};
-          const regex = /<tr><td class="mp text">([^<]+)<\/td>\s*<td class="mp text">[\s\S]*?<a href="([^"]+)">Weekly<\/a>/g;
-          let match;
-          while ((match = regex.exec(html)) !== null) {
-            const name = match[1].trim();
-            freshMap[name] = `https://kworb.net/spotify/${match[2]}`;
-          }
-          setRegionUrlMap(freshMap);
-          await AsyncStorage.setItem(REGION_URL_MAP_KEY, JSON.stringify(freshMap));
-          await AsyncStorage.setItem(REGION_URL_MAP_TIMESTAMP_KEY, Date.now().toString());
-        }
-      } catch (e) {
-        console.error('Failed to load cached data:', e);
+      } catch (error) {
+        console.error('Failed to restore local setup state:', error);
+        setShowFirstRunSetup(true);
       }
     })();
   }, []);
@@ -165,52 +89,6 @@ export default function HomeScreen() {
   useEffect(() => {
     setSetupTheme(mode);
   }, [mode]);
-
-  useEffect(() => {
-    if (!isOffline && wasOfflineRef.current) {
-      void (async () => {
-        try {
-          const timestamp = await AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY);
-          const isStale = !timestamp || Date.now() - parseInt(timestamp, 10) > REGION_CACHE_TTL_MS;
-          if (!isStale) return;
-
-          const res = await crossFetch(KWORD_URL);
-          const html = await res.text();
-          const map: Record<string, string> = {};
-          const regex = /<tr><td class="mp text">([^<]+)<\/td>\s*<td class="mp text">[\s\S]*?<a href="([^"]+)">Weekly<\/a>/g;
-          let match;
-          while ((match = regex.exec(html)) !== null) {
-            const name = match[1].trim();
-            map[name] = `https://kworb.net/spotify/${match[2]}`;
-          }
-          setRegionUrlMap(map);
-          await AsyncStorage.setItem(REGION_URL_MAP_KEY, JSON.stringify(map));
-          await AsyncStorage.setItem(REGION_URL_MAP_TIMESTAMP_KEY, Date.now().toString());
-        } catch (e) {
-          console.error('Region URL map re-fetch error:', e);
-        }
-      })();
-      if (regionOverride === 'auto') {
-        void (async () => {
-          try {
-            setCountryLoading(true);
-            const res = await crossFetch('https://ipinfo.io/json');
-            const data = await res.json();
-            if (data && data.country && COUNTRY_NAMES[data.country]) {
-              setDetectedCountry(COUNTRY_NAMES[data.country]);
-            } else {
-              setDetectedCountry('your country');
-            }
-          } catch (e) {
-            console.error('Country re-fetch error:', e);
-          } finally {
-            setCountryLoading(false);
-          }
-        })();
-      }
-    }
-    wasOfflineRef.current = isOffline;
-  }, [isOffline, regionOverride]);
 
   const loadRecentlyPlayed = React.useCallback(async () => {
     try {
@@ -229,139 +107,24 @@ export default function HomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       void loadRecentlyPlayed();
-      void (async () => {
-        try {
-          const storedRegion = await AsyncStorage.getItem(REGION_OVERRIDE_KEY);
-          setRegionOverride(storedRegion && storedRegion.trim() ? storedRegion : 'auto');
-        } catch (e) {
-          console.error('Failed to refresh region override:', e);
-        }
-      })();
-      void (async () => {
-        try {
-          const stored = await AsyncStorage.getItem(TRENDING_ENABLED_KEY);
-          if (stored !== null) setTrendingEnabled(stored === 'true');
-        } catch (e) {
-          console.error('Failed to refresh trending setting:', e);
-        }
-      })();
     }, [loadRecentlyPlayed])
   );
-
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+    void (async () => {
+      setHomeLoading(true);
       try {
-        const res = await crossFetch('https://ipinfo.io/json');
-        const data = await res.json();
-        if (data && data.country && COUNTRY_NAMES[data.country]) {
-          setDetectedCountry(COUNTRY_NAMES[data.country]);
-        } else {
-          setDetectedCountry('your country');
-        }
-      } catch (e) {
-        console.error('Country fetch error:', e);
-        setDetectedCountry('your country');
+        const sections = await MusicAPI.getHomeSections();
+        if (mounted) setHomeSections(sections);
+      } catch (error) {
+        console.error('[Home] Extension recommendations unavailable:', error);
+        if (mounted) setHomeSections([]);
       } finally {
-        setCountryLoading(false);
+        if (mounted) setHomeLoading(false);
       }
     })();
+    return () => { mounted = false; };
   }, []);
-
-  const activeRegion = regionOverride === 'auto' ? detectedCountry : regionOverride;
-  const formattedActiveRegion = activeRegion
-    .split(' ')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchTrendingTracks = async (list: string[]) => {
-
-      let cache = { ...trendingCache };
-      const tracks: Track[] = [];
-      let cacheChanged = false;
-
-
-      for (const entry of list) {
-        if (cache[entry]) {
-          tracks.push(cache[entry]);
-        }
-      }
-
-
-      if (isMounted) {
-        setTrendingTracks([...tracks]);
-      }
-
-
-      for (const entry of list) {
-        if (!cache[entry]) {
-          try {
-            const res = await MusicAPI.searchTracks(entry);
-            if (res.tracks && res.tracks.length > 0) {
-              cache[entry] = res.tracks[0];
-              tracks.push(res.tracks[0]);
-              cacheChanged = true;
-
-
-              if (isMounted) {
-                setTrendingTracks([...tracks]);
-              }
-            } else {
-              console.warn(`[Trending] No results for: ${entry}`);
-            }
-          } catch (e) {
-            console.error(`[Trending] Error fetching "${entry}":`, e);
-          }
-        }
-      }
-
-      if (cacheChanged) {
-        setTrendingCache(cache);
-        try {
-          await AsyncStorage.setItem(TRENDING_TRACKS_CACHE_KEY, JSON.stringify(cache));
-        } catch (e) {
-          console.error('Failed to save trending tracks cache:', e);
-        }
-      }
-    };
-
-    const fetchKworbWeekly = async (weeklyUrl: string) => {
-      try {
-        const res = await crossFetch(weeklyUrl);
-        const html = await res.text();
-        const trackRegex = /<td class="text mp"><div><a href="[^"]+">([^<]+)<\/a> - <a href="[^"]+">([^<]+)<\/a>/g;
-        const searchQueries: string[] = [];
-        let match;
-        while ((match = trackRegex.exec(html)) !== null) {
-          searchQueries.push(match[2].trim());
-        }
-        fetchTrendingTracks(searchQueries.slice(0, 50));
-      } catch (e) {
-        console.error('Failed to fetch kworb weekly chart:', e);
-        if (isMounted) setTrendingTracks([]);
-      }
-    };
-
-    if (!countryLoading && activeRegion && activeRegion !== 'your country') {
-      const activeKey = activeRegion.toLowerCase();
-      const regionKey = Object.keys(regionUrlMap).find(k => k.toLowerCase() === activeKey);
-      if (regionKey && regionUrlMap[regionKey]) {
-        fetchKworbWeekly(regionUrlMap[regionKey]);
-      } else {
-        const globalKey = Object.keys(regionUrlMap).find(k => k.toLowerCase() === 'global');
-        if (globalKey && regionUrlMap[globalKey]) {
-          fetchKworbWeekly(regionUrlMap[globalKey]);
-        } else {
-          if (isMounted) setTrendingTracks([]);
-        }
-      }
-    } else {
-      if (isMounted) setTrendingTracks([]);
-    }
-    return () => { isMounted = false; };
-  }, [activeRegion, countryLoading, regionUrlMap, trendingCache]);
 
   const handleViewChange = (view: 'home' | 'search') => {
     setCurrentView(view);
@@ -386,7 +149,6 @@ export default function HomeScreen() {
       await AsyncStorage.setItem(FIRST_RUN_SETUP_KEY, '1');
       await i18n.changeLanguage(setupLanguage);
       setMode(setupTheme);
-      setRegionOverride(setupRegion);
       setShowFirstRunSetup(false);
     } catch (error) {
       console.error('Failed to save first run setup:', error);
@@ -441,28 +203,20 @@ export default function HomeScreen() {
               onDownloads={handleDownloadsNav}
               onLibrary={handleLibraryNav}
             />
-            {trendingEnabled && (
-              <View>
-                <SectionHeader
-                  title={t('home.trending_in', { region: countryLoading ? '...' : (formattedActiveRegion || t('home.your_country')) })}
-                />
-                {trendingTracks.length > 0 ? (
-                  <HorizontalTrackList
-                    title=""
-                    tracks={trendingTracks}
-                    onTrackSelect={handleHomeTrackSelect}
-                    isPlaying={isPlaying}
-                    currentTrack={currentTrack}
-                  />
-                ) : (
-                  Object.keys(regionUrlMap).length > 0 && (
-                    <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 16 }}>
-                      {t('home.loading_trending')}
-                    </Text>
-                  )
-                )}
+            {homeLoading && <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 8, marginBottom: 16 }}>{t('home.loading_recommendations', { defaultValue: 'Loading recommendations from Extensions…' })}</Text>}
+            {!homeLoading && homeSections.length === 0 && (
+              <View style={[styles.emptyBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <Ionicons name="extension-puzzle-outline" size={24} color={theme.textSecondary} />
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{t('home.no_extension_recommendations', { defaultValue: 'Enable an Extension with search and home capabilities to see recommendations.' })}</Text>
+                <TouchableOpacity onPress={() => router.push('/extensions')}><Text style={{ color: theme.accent, fontWeight: '700', marginTop: 8 }}>{t('common.open', { defaultValue: 'Open Extensions' })}</Text></TouchableOpacity>
               </View>
             )}
+            {homeSections.map((section) => (
+              <View key={`${section.providerId}:${section.id}`} style={{ marginTop: 16 }}>
+                <SectionHeader title={t(`home.section_${section.id}`, { defaultValue: section.id })} />
+                <HorizontalTrackList title="" tracks={section.tracks} onTrackSelect={handleHomeTrackSelect} isPlaying={isPlaying} currentTrack={currentTrack} />
+              </View>
+            ))}
 
             <View style={{ marginTop: 16 }}>
               <SectionHeader title={t('home.liked_songs')} onSeeAll={handleLibraryNav} />
@@ -627,7 +381,7 @@ export default function HomeScreen() {
           <View style={[styles.setupLanguageModalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[styles.setupSectionTitle, { color: theme.textPrimary, marginBottom: 12 }]}>Region</Text>
             <FlatList
-              data={['auto', ...Object.keys(regionUrlMap)]}
+              data={['auto']}
               keyExtractor={(item) => item}
               renderItem={({ item }) => {
                 const active = setupRegion === item;

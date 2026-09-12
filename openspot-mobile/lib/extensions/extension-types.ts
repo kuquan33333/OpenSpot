@@ -1,4 +1,5 @@
 export type ExtensionHealthStatus = 'online' | 'degraded' | 'offline' | 'unknown' | 'unsupported';
+export type ExtensionCapabilities = string[] | Record<string, unknown>;
 
 export interface InstalledExtension {
   id: string;
@@ -13,11 +14,28 @@ export interface InstalledExtension {
   enabled?: boolean;
   error?: string;
   health?: ExtensionHealthStatus;
-  capabilities?: string[];
+  // Older native hosts exposed this as string[], while the current Core
+  // serializes the manifest capability map as an object.
+  capabilities?: ExtensionCapabilities;
   permissions?: string[];
   has_metadata_provider?: boolean;
   has_download_provider?: boolean;
   has_lyrics_provider?: boolean;
+}
+
+export function extensionCapabilityNames(value: ExtensionCapabilities | undefined): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  }
+  if (value && typeof value === 'object') return Object.keys(value);
+  return [];
+}
+
+export function hasExtensionCapability(extension: InstalledExtension, name: string): boolean {
+  if (extension.types?.includes(name)) return true;
+  const capabilities = extension.capabilities;
+  if (Array.isArray(capabilities)) return capabilities.includes(name);
+  return Boolean(capabilities && typeof capabilities[name] === 'boolean' && capabilities[name]);
 }
 
 export interface RepositoryExtension {

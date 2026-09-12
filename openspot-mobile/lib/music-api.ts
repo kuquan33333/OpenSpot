@@ -1,6 +1,8 @@
 import { SearchResponse, SearchParams, Track } from '../types/music';
-import { MusicApi } from './api';
-import { ProviderRegistry, type ProviderId } from './providers/provider-registry';
+import { ProviderRegistry, type ProviderId, type ProviderHomeSection } from './providers/provider-registry';
+import { HOME_SECTION_DEFINITIONS } from './providers/home-sections';
+import { extensionCoreBridge } from './extensions/extension-core-bridge';
+import { normalizeExtensionTrack } from './providers/extension-provider-adapter';
 import { normalizeStoredTrack, parseStoredJSON } from './storage-validation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -120,23 +122,28 @@ export class MusicAPI {
   }
 
   static async getPopularTracks(): Promise<Track[]> {
-    return MusicApi.getPopularTracks();
+    const sections = await this.getHomeSections();
+    return sections.find((section) => section.id === 'trending')?.tracks ?? [];
   }
 
   static async getAlbumSongs(albumId: string): Promise<Track[]> {
-    return MusicApi.getAlbumSongs(albumId);
+    return this.getCollectionTracks('album', albumId);
   }
 
   static async getArtistSongs(artistId: string, page: number = 0): Promise<{ tracks: Track[]; total: number }> {
-    return MusicApi.getArtistSongs(artistId, page);
+    const tracks = await this.getCollectionTracks('artist', artistId);
+    const pageSize = 20;
+    return { tracks: tracks.slice(page * pageSize, (page + 1) * pageSize), total: tracks.length };
   }
 
   static async getPlaylistSongs(playlistId: string): Promise<Track[]> {
-    return MusicApi.getPlaylistSongs(playlistId);
+    return this.getCollectionTracks('playlist', playlistId);
   }
 
   static async getPlaylistSongsPaginated(playlistId: string, page = 0): Promise<{ tracks: Track[]; total: number }> {
-    return MusicApi.getPlaylistSongsPaginated(playlistId, page);
+    const tracks = await this.getCollectionTracks('playlist', playlistId);
+    const pageSize = 20;
+    return { tracks: tracks.slice(page * pageSize, (page + 1) * pageSize), total: tracks.length };
   }
 
   static async getRecentlyPlayed(): Promise<Track[]> {
@@ -173,7 +180,40 @@ export class MusicAPI {
   }
 
   static async getMadeForYou(): Promise<Track[]> {
-    return MusicApi.getMadeForYou();
+    const sections = await this.getHomeSections();
+    return sections.find((section) => section.id === 'chill')?.tracks ?? [];
+  }
+
+  static async getHomeSections(): Promise<ProviderHomeSection[]> {
+    return ProviderRegistry.getHomeSections(HOME_SECTION_DEFINITIONS);
+  }
+
+  private static async getCollectionTracks(resourceType: 'album' | 'artist' | 'playlist', resourceId: string): Promise<Track[]> {
+    let lastError: unknown = null;
+    for (const provider of ProviderRegistry.list()) {
+      if (!provider.capabilities.has('search')) continue;
+      try {
+        const payload = await extensionCoreBridge.getProviderMetadata(provider.id, resourceType, resourceId);
+        const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+        const rawTracks: unknown[] = [];
+        const append = (value: unknown) => { if (Array.isArray(value)) rawTracks.push(...value); };
+        append(record.track_list);
+        append(record.tracks);
+        if (resourceType === 'artist') {
+          append(record.top_tracks);
+          if (Array.isArray(record.releases)) {
+            for (const release of record.releases) {
+              if (release && typeof release === 'object') append((release as Record<string, unknown>).tracks);
+            }
+          }
+        }
+        const tracks = rawTracks.map((item) => normalizeExtensionTrack(item, provider.id));
+        if (tracks.length > 0) return tracks;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(`No Extension provider could load ${resourceType}`);
   }
 
   static async resolveTrackById(trackId: string, preferredProvider?: ProviderId): Promise<Track | null> {

@@ -16,7 +16,6 @@ import { useConnectivity } from '@/hooks/useConnectivity';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
 import { setupMediaSession, updateMediaSession } from '@/lib/media-session';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -66,7 +65,6 @@ export default function TabLayout() {
   const { isOffline } = useConnectivity();
   const router = useRouter();
   const pathname = usePathname();
-  const { isProviderDisabled } = useApiStatus();
   const { toastMessage, toastType, showToast } = useToast();
 
   const isIOS = Platform.OS === 'ios';
@@ -118,7 +116,7 @@ export default function TabLayout() {
   }, [currentVersion]);
 
   useEffect(() => {
-    void syncExtensionProviders().catch((error) => console.warn('[Extensions] provider sync unavailable:', error));
+    void syncExtensionProviders(currentVersion).catch((error) => console.warn('[Extensions] provider sync unavailable:', error));
   }, []);
 
   const pendingAutoPlayRef = useRef(false);
@@ -133,12 +131,6 @@ export default function TabLayout() {
   );
 
   const handleTrackSelect = (track: Track, trackList?: Track[], startIndex?: number) => {
-    const trackProvider = track.provider || 'saavn';
-    if (isProviderDisabled(trackProvider as 'saavn' | 'ytmusic')) {
-      showToast('Currently API is down. Please use Saavn.', 'error');
-      return;
-    }
-
     if (pendingPlayTimeoutRef.current) {
       clearTimeout(pendingPlayTimeoutRef.current);
       pendingPlayTimeoutRef.current = null;
@@ -175,12 +167,6 @@ export default function TabLayout() {
   };
 
   const handleQueueTrackSelect = (track: Track, index: number) => {
-    const trackProvider = track.provider || 'saavn';
-    if (isProviderDisabled(trackProvider as 'saavn' | 'ytmusic')) {
-      showToast('Currently API is down. Please use Saavn.', 'error');
-      return;
-    }
-
     const isSameTrack = currentTrack?.id === track.id;
     if (isSameTrack) {
       setIsPlaying(prev => !prev);

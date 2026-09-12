@@ -21,10 +21,8 @@ import { useRouter } from 'expo-router';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemeMode, useThemeMode } from '@/hooks/theme-mode';
-import { useApiStatus } from '@/hooks/useApiStatus';
 import { useToast } from '@/hooks/useToast';
 import { openExternalUrl } from '@/lib/tauri-offline';
-import { MusicApi } from '@/lib/api';
 import { MusicAPI } from '@/lib/music-api';
 import { clearAudioMetaCache } from '@/lib/automix/audio-meta-repository';
 import { clearDiagnostics, getDiagnostics, subscribeDiagnostics } from '@/lib/diagnostics';
@@ -37,14 +35,8 @@ const YOUTUBE_URL = 'https://www.youtube.com/@nerdsClub';
 const TWITTER_URL = 'https://twitter.com/jash_gro';
 const GITHUB_URL = 'https://github.com/BlackHatDevX';
 const UPDATE_CONFIG_URL = 'https://raw.githubusercontent.com/BlackHatDevX/openspot-config/refs/heads/main/update-desktop.json';
-const KWORD_URL = 'https://kworb.net/spotify/';
 const REGION_OVERRIDE_KEY = 'openspot_region_override_v1';
-const REGION_URL_MAP_KEY = 'openspot_region_url_map_v1';
-const REGION_URL_MAP_TIMESTAMP_KEY = 'openspot_region_url_map_ts_v1';
-const REGION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const LANGUAGE_KEY = 'openspot_language_v1';
-const PROVIDER_KEY = 'openspot_provider_v1';
-const TRENDING_ENABLED_KEY = 'openspot_trending_enabled_v1';
 const ROTATING_COVER_KEY = 'openspot_rotating_cover_v1';
 
 interface UpdateConfig {
@@ -67,17 +59,12 @@ export default function SettingsScreen() {
   const [region, setRegion] = useState<string>('auto');
   const [regionOptions, setRegionOptions] = useState<string[]>(['auto']);
   const [language, setLanguage] = useState<string>('en');
-  const [provider, setProvider] = useState<string>('saavn');
-  const [trendingEnabled, setTrendingEnabled] = useState<boolean>(true);
   const [rotatingCover, setRotatingCover] = useState<boolean>(true);
   const [isLanguageModalOpen, setIsLanguageModalOpen] = useState(false);
   const [isRegionModalOpen, setIsRegionModalOpen] = useState(false);
   const [updateConfig, setUpdateConfig] = useState<UpdateConfig | null>(null);
   const [showForceUpdate, setShowForceUpdate] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [showBetaWarning, setShowBetaWarning] = useState(false);
-  const [pendingProvider, setPendingProvider] = useState<string | null>(null);
-  const { isProviderDisabled } = useApiStatus();
   const { toastMessage, toastType, showToast } = useToast();
   const [diagnosticCount, setDiagnosticCount] = useState(0);
 
@@ -142,45 +129,6 @@ export default function SettingsScreen() {
     { label: 'Korean', value: 'ko', nativeLabel: '한국어' },
   ];
 
-  const providerOptions: { label: string; value: string }[] = [
-    { label: 'Saavn', value: 'saavn' },
-    { label: 'YouTube (Beta)', value: 'ytmusic' },
-  ];
-
-  const loadRegionOptions = async () => {
-    try {
-      const response = await fetch(KWORD_URL);
-      const html = await response.text();
-      const regionMap: Record<string, string> = {};
-      const regex = /<tr><td class="mp text">([^<]+)<\/td>\s*<td class="mp text">[\s\S]*?<a href="([^"]+)">Weekly<\/a>/g;
-      let match;
-      while ((match = regex.exec(html)) !== null) {
-        const name = match[1].trim();
-        const url = `https://kworb.net/spotify/${match[2]}`;
-        regionMap[name] = url;
-      }
-      await AsyncStorage.setItem(REGION_URL_MAP_KEY, JSON.stringify(regionMap));
-      await AsyncStorage.setItem(REGION_URL_MAP_TIMESTAMP_KEY, Date.now().toString());
-      const mergedOptions = ['auto', ...Object.keys(regionMap)];
-      setRegionOptions(mergedOptions);
-      setRegion((current) => (mergedOptions.includes(current) ? current : 'auto'));
-    } catch (error) {
-      console.error('Failed to load supported regions:', error);
-      setRegionOptions(['auto', 'global']);
-    }
-  };
-
-  const refreshRegionOptionsIfStale = async () => {
-    try {
-      const timestamp = await AsyncStorage.getItem(REGION_URL_MAP_TIMESTAMP_KEY);
-      if (!timestamp || Date.now() - parseInt(timestamp, 10) > REGION_CACHE_TTL_MS) {
-        await loadRegionOptions();
-      }
-    } catch {
-      await loadRegionOptions();
-    }
-  };
-
   const checkForUpdates = useCallback(async () => {
     setIsCheckingUpdate(true);
     try {
@@ -226,28 +174,6 @@ export default function SettingsScreen() {
       }
     };
 
-    const loadProvider = async () => {
-      try {
-        const storedProvider = await AsyncStorage.getItem(PROVIDER_KEY);
-        if (storedProvider && storedProvider.trim()) {
-          setProvider(storedProvider);
-        }
-      } catch (error) {
-        console.error('Failed to load provider setting:', error);
-      }
-    };
-
-    const loadTrendingEnabled = async () => {
-      try {
-        const stored = await AsyncStorage.getItem(TRENDING_ENABLED_KEY);
-        if (stored !== null) {
-          setTrendingEnabled(stored === 'true');
-        }
-      } catch (error) {
-        console.error('Failed to load trending setting:', error);
-      }
-    };
-
     const loadRotatingCover = async () => {
       try {
         const stored = await AsyncStorage.getItem(ROTATING_COVER_KEY);
@@ -261,21 +187,7 @@ export default function SettingsScreen() {
 
     void loadRegion();
     void loadLanguage();
-    void loadProvider();
-    void loadTrendingEnabled();
     void loadRotatingCover();
-    void (async () => {
-      try {
-        const cachedMap = await AsyncStorage.getItem(REGION_URL_MAP_KEY);
-        if (cachedMap) {
-          const parsed = JSON.parse(cachedMap);
-          const merged = ['auto', ...Object.keys(parsed)];
-          setRegionOptions(merged);
-          setRegion((current) => (merged.includes(current) ? current : 'auto'));
-        }
-      } catch {}
-      await refreshRegionOptionsIfStale();
-    })();
     void checkForUpdates();
   }, [i18n, checkForUpdates]);
 
@@ -298,53 +210,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleProviderChange = async (nextProvider: string) => {
-    if (isProviderDisabled(nextProvider as 'saavn' | 'ytmusic')) {
-      showToast('Currently API is down. Please use Saavn.', 'error');
-      return;
-    }
-    
-    if (nextProvider === 'ytmusic' && provider !== 'ytmusic') {
-      setPendingProvider(nextProvider);
-      setShowBetaWarning(true);
-      return;
-    }
-    
-    setProvider(nextProvider);
-    try {
-      await AsyncStorage.setItem(PROVIDER_KEY, nextProvider);
-    } catch (error) {
-      console.error('Failed to save provider setting:', error);
-    }
-  };
-
-  const handleBetaWarningProceed = async () => {
-    if (pendingProvider) {
-      setProvider(pendingProvider);
-      try {
-        await AsyncStorage.setItem(PROVIDER_KEY, pendingProvider);
-      } catch (error) {
-        console.error('Failed to save provider setting:', error);
-      }
-    }
-    setShowBetaWarning(false);
-    setPendingProvider(null);
-  };
-
-  const handleBetaWarningBack = () => {
-    setShowBetaWarning(false);
-    setPendingProvider(null);
-  };
-
-  const handleTrendingToggle = async (enabled: boolean) => {
-    setTrendingEnabled(enabled);
-    try {
-      await AsyncStorage.setItem(TRENDING_ENABLED_KEY, String(enabled));
-    } catch (error) {
-      console.error('Failed to save trending setting:', error);
-    }
-  };
-
   const handleRotatingCoverToggle = async (enabled: boolean) => {
     setRotatingCover(enabled);
     try {
@@ -355,7 +220,6 @@ export default function SettingsScreen() {
   };
 
   const clearCachesAndDiagnostics = async () => {
-    MusicApi.clearCache();
     MusicAPI.clearCache();
     await clearAudioMetaCache().catch(() => {});
     clearDiagnostics();
@@ -412,26 +276,15 @@ export default function SettingsScreen() {
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>{t('settings.music_provider')}</Text>
           <Text style={[styles.cardText, { color: theme.textSecondary }]}>
-            {t('settings.provider_description')}
+            {t('settings.provider_description', { defaultValue: 'Music search, recommendations, playback and downloads come from enabled Extensions.' })}
           </Text>
-          <View style={styles.segmentRow}>
-            {providerOptions.map((option) => {
-              const active = provider === option.value;
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.segmentButton,
-                    { backgroundColor: theme.surfaceElevated, borderColor: theme.border },
-                    active && { backgroundColor: theme.accent, borderColor: theme.accent },
-                  ]}
-                  onPress={() => handleProviderChange(option.value)}
-                >
-                  <Text style={[styles.segmentText, { color: active ? '#fff' : theme.textSecondary }]}>{option.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <TouchableOpacity
+            style={[styles.secondaryButton, { borderColor: theme.border, alignSelf: 'flex-start', marginTop: 10 }]}
+            onPress={() => router.push('/extensions')}
+          >
+            <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>{t('settings.manage_extensions', { defaultValue: 'Manage Extensions' })}</Text>
+            <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -495,42 +348,6 @@ export default function SettingsScreen() {
               activeOpacity={0.8}
             >
               <View style={[styles.toggleThumb, rotatingCover && styles.toggleThumbOn]} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.toggleRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 2 }]}>{t('settings.trending')}</Text>
-              <Text style={[styles.cardText, { color: theme.textSecondary }]}>{t('settings.trending_description')}</Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.toggleTrack, { backgroundColor: trendingEnabled ? theme.accent : theme.surfaceElevated }]}
-              onPress={() => handleTrendingToggle(!trendingEnabled)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.toggleThumb, trendingEnabled && styles.toggleThumbOn]} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={[!trendingEnabled && { opacity: 0.5 }]}>
-            <TouchableOpacity
-              style={[styles.dropdownButton, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, marginTop: 12 }]}
-              onPress={async () => {
-                await refreshRegionOptionsIfStale();
-                setIsRegionModalOpen(true);
-              }}
-            >
-              <Text style={[styles.dropdownButtonText, { color: theme.textPrimary }]}>
-                {region === 'auto'
-                  ? t('settings.auto')
-                  : region
-                      .split(' ')
-                      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-                      .join(' ')}
-              </Text>
-              <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -790,39 +607,6 @@ export default function SettingsScreen() {
             <TouchableOpacity style={styles.cancelButtonRow} onPress={() => setShowChangelog(false)}>
               <Text style={{ color: theme.textPrimary, fontSize: 15 }}>{t('common.close')}</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Beta Warning Modal */}
-      <Modal visible={showBetaWarning} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.betaWarningCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Ionicons name="warning" size={48} color={theme.accent} style={{ alignSelf: 'center', marginBottom: 12 }} />
-            <Text style={[styles.cardTitle, { color: theme.textPrimary, textAlign: 'center', fontSize: 18 }]}>
-              {t('settings.beta_warning_title')}
-            </Text>
-            <Text style={[styles.cardText, { color: theme.textSecondary, textAlign: 'center', marginBottom: 16 }]}>
-              {t('settings.beta_warning_description')}
-            </Text>
-            <TouchableOpacity style={styles.betaLinkRow} onPress={() => openExternalUrl('https://t.me/openspot_music/15')}>
-              <Text style={[styles.betaLinkText, { color: theme.accent }]}>{t('settings.beta_warning_link')}</Text>
-              <Ionicons name="arrow-forward" size={16} color={theme.accent} />
-            </TouchableOpacity>
-            <View style={styles.betaButtonRow}>
-              <TouchableOpacity
-                style={[styles.secondaryButton, { borderColor: theme.border, flex: 1, marginRight: 8 }]}
-                onPress={handleBetaWarningBack}
-              >
-                <Text style={[styles.secondaryButtonText, { color: theme.textPrimary }]}>{t('settings.back')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.primaryButton, { backgroundColor: theme.accent, flex: 1 }]}
-                onPress={handleBetaWarningProceed}
-              >
-                <Text style={styles.primaryButtonText}>{t('settings.proceed')}</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>

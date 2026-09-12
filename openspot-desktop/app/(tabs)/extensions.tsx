@@ -13,14 +13,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import Constants from 'expo-constants';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
-import type { ExtensionHealthResult, InstalledExtension, RepositoryExtension } from '@/lib/extensions/extension-types';
+import { extensionCapabilityNames, type ExtensionHealthResult, type InstalledExtension, type RepositoryExtension } from '@/lib/extensions/extension-types';
 
 type ExtensionPage = 'store' | 'installed' | 'priority' | 'fallback';
 
 const DEFAULT_REPOSITORY_URL = process.env.EXPO_PUBLIC_EXTENSION_REGISTRY_URL?.trim() ?? '';
+const APP_VERSION = Constants.expoConfig?.version ?? '3.1.5';
 
 function extensionTitle(extension: InstalledExtension | RepositoryExtension): string {
   return ('display_name' in extension && extension.display_name) || extension.name || extension.id;
@@ -72,6 +74,7 @@ export default function ExtensionsScreen() {
 
   const initializeCore = useCallback(async () => {
     if (!extensionCoreBridge.isAvailable()) return;
+    await extensionCoreBridge.setAppVersion(APP_VERSION);
     await extensionCoreBridge.initialize();
     await extensionCoreBridge.initRepository();
   }, []);
@@ -316,7 +319,7 @@ export default function ExtensionsScreen() {
             </View>
             {expandedID === extension.id && <View style={[styles.details, { backgroundColor: theme.elevated }]}>
               {!!extension.homepage && <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.homepage', 'Homepage')}: {extension.homepage}</Text>}
-              <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.capabilities', 'Capabilities')}: {(extension.capabilities ?? extension.types ?? []).join(' · ') || text('extensions.none', 'None')}</Text>
+              <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.capabilities', 'Capabilities')}: {extensionCapabilityNames(extension.capabilities).concat(extension.types ?? []).filter((value, index, values) => values.indexOf(value) === index).join(' · ') || text('extensions.none', 'None')}</Text>
               {!!extension.permissions?.length && <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.permissions', 'Permissions')}: {extension.permissions.join(' · ')}</Text>}
             </View>}
           </View>

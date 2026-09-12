@@ -800,6 +800,7 @@ func (m *extensionManager) GetInstalledExtensionsJSON() (string, error) {
 		Name                   string                 `json:"name"`
 		DisplayName            string                 `json:"display_name"`
 		Version                string                 `json:"version"`
+		MinAppVersion          string                 `json:"min_app_version,omitempty"`
 		Description            string                 `json:"description"`
 		Homepage               string                 `json:"homepage,omitempty"`
 		IconPath               string                 `json:"icon_path,omitempty"`
@@ -872,6 +873,7 @@ func (m *extensionManager) GetInstalledExtensionsJSON() (string, error) {
 			Name:                   ext.Manifest.Name,
 			DisplayName:            ext.Manifest.DisplayName,
 			Version:                ext.Manifest.Version,
+			MinAppVersion:          ext.Manifest.MinAppVersion,
 			Description:            ext.Manifest.Description,
 			Homepage:               ext.Manifest.Homepage,
 			IconPath:               iconPath,

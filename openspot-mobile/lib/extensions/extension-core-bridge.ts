@@ -65,6 +65,7 @@ export const isExtensionCoreAvailable = (): boolean => Boolean(resolveNativeModu
 
 export const extensionCoreBridge = {
   isAvailable: isExtensionCoreAvailable,
+  setAppVersion: (version: string) => callNative<void>('SetAppVersion', version),
   initialize: (extensionsDir: string, dataDir: string) => callNative<void>('InitExtensionSystem', extensionsDir, dataDir),
   loadFromDirectory: async (directory: string) => {
     const result = await callNative<{ loaded?: unknown; errors?: unknown }>('LoadExtensionsFromDir', directory);

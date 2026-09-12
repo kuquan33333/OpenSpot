@@ -30,6 +30,7 @@ import { DownloadButton } from './DownloadButton';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
 import TrackPlayer, { RepeatMode } from 'react-native-track-player';
+import { recordDiagnostic } from '@/lib/diagnostics';
 
 const ROTATING_COVER_KEY = 'openspot_rotating_cover_v1';
 
@@ -174,14 +175,20 @@ export function FullScreenPlayer({
   useEffect(() => {
     if (!track) return;
     const loadPlaylists = async () => {
-      const pls = await PlaylistStorage.getPlaylists();
-      setPlaylists(pls);
-      const preSel = pls
-        .filter(pl => pl.trackIds.includes(track.id.toString()))
-        .map(pl => pl.name);
-      setSelected(preSel);
+      try {
+        const pls = await PlaylistStorage.getPlaylists();
+        setPlaylists(pls);
+        const preSel = pls
+          .filter(pl => pl.trackIds.includes(track.id.toString()))
+          .map(pl => pl.name);
+        setSelected(preSel);
+      } catch (error) {
+        recordDiagnostic({ category: 'cache', type: 'fullscreen_playlist_load_failed', message: error instanceof Error ? error.message : String(error), data: { trackId: String(track.id) } });
+        setPlaylists([]);
+        setSelected([]);
+      }
     };
-    loadPlaylists();
+    void loadPlaylists();
   }, [track]);
 
   useEffect(() => {
@@ -434,14 +441,19 @@ export function FullScreenPlayer({
   const openPlaylistModal = useCallback(async () => {
     if (!track) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const pls = await PlaylistStorage.getPlaylists();
-    setPlaylists(pls);
-    const preSel = pls
-      .filter(pl => pl.trackIds.includes(track.id.toString()))
-      .map(pl => pl.name);
-    setSelected(preSel);
-    setShowAddModal(true);
-  }, [track]);
+    try {
+      const pls = await PlaylistStorage.getPlaylists();
+      setPlaylists(pls);
+      const preSel = pls
+        .filter(pl => pl.trackIds.includes(track.id.toString()))
+        .map(pl => pl.name);
+      setSelected(preSel);
+      setShowAddModal(true);
+    } catch (error) {
+      recordDiagnostic({ category: 'cache', type: 'playlist_modal_load_failed', message: error instanceof Error ? error.message : String(error), data: { trackId: String(track.id) } });
+      Alert.alert(t('components.error'), t('components.playlist_update_failed'));
+    }
+  }, [track, t]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToastMessage(message);

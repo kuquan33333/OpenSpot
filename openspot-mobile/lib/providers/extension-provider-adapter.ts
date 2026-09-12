@@ -1,7 +1,8 @@
 import type { Album, Artist, PlaylistSearchItem, SearchParams, SearchResponse, Track } from '@/types/music';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
-import type { InstalledExtension } from '@/lib/extensions/extension-types';
+import { extensionCapabilityNames, type InstalledExtension } from '@/lib/extensions/extension-types';
 import { ProviderRegistry, type ProviderAdapter, type ProviderCapability } from './provider-registry';
+import { getExtensionCapabilityOverrides, type ExtensionCapabilityOverrides } from './extension-capability-settings';
 
 type LooseRecord = Record<string, unknown>;
 const stringValue = (record: LooseRecord, ...keys: string[]): string => {
@@ -67,19 +68,21 @@ function getUrl(raw: unknown): string {
   return stringValue(track, 'stream_url', 'audio_url', 'url', 'preview_url');
 }
 
-export function createExtensionProviderAdapter(extension: InstalledExtension): ProviderAdapter {
+export function createExtensionProviderAdapter(extension: InstalledExtension, overrides: ExtensionCapabilityOverrides[string] = {}): ProviderAdapter {
   const id = extension.id;
-  const types = new Set([...(extension.types ?? []), ...(extension.capabilities ?? [])]);
+  const types = new Set([...(extension.types ?? []), ...extensionCapabilityNames(extension.capabilities)]);
   const supportsMetadata = extension.has_metadata_provider === true || types.has('metadata_provider');
   const supportsDownload = extension.has_download_provider === true || types.has('download_provider');
   const capabilities = new Set<ProviderCapability>();
-  if (supportsMetadata) capabilities.add('search').add('stream');
-  if (supportsMetadata || supportsDownload) capabilities.add('download');
+  if (supportsMetadata && overrides.search !== false) capabilities.add('search');
+  if (supportsMetadata && overrides.stream !== false) capabilities.add('stream');
+  if (supportsMetadata && overrides.home !== false) capabilities.add('home');
+  if ((supportsMetadata || supportsDownload) && overrides.download !== false) capabilities.add('download');
   return {
     id,
     displayName: extension.display_name || extension.name || id,
     capabilities,
-    search: async (params: SearchParams) => params.type && params.type !== 'track' ? normalizeResponse([], id) : normalizeResponse(await extensionCoreBridge.searchMetadata(params.q, 20, true), id),
+    search: async (params: SearchParams) => params.type && params.type !== 'track' ? normalizeResponse([], id) : normalizeResponse(await extensionCoreBridge.searchMetadataProvider(id, params.q, 20), id),
     searchTracks: async (query: string, _page = 1, limit = 20) => normalizeResponse(await extensionCoreBridge.searchMetadataProvider(id, query, limit), id),
     getStreamUrl: async (trackId: string) => {
       const url = getUrl(await extensionCoreBridge.getProviderMetadata(id, 'track', trackId));
@@ -96,15 +99,17 @@ export function createExtensionProviderAdapter(extension: InstalledExtension): P
 
 const registeredExtensionProviders = new Set<string>();
 
-export async function syncExtensionProviders(): Promise<void> {
+export async function syncExtensionProviders(appVersion?: string): Promise<void> {
   if (!extensionCoreBridge.isAvailable()) return;
+  if (appVersion?.trim()) await extensionCoreBridge.setAppVersion(appVersion);
   const installed = await extensionCoreBridge.getInstalled();
+  const overrides = await getExtensionCapabilityOverrides();
   for (const providerId of registeredExtensionProviders) ProviderRegistry.unregister(providerId);
   registeredExtensionProviders.clear();
   for (const extension of installed) {
-    const types = new Set([...(extension.types ?? []), ...(extension.capabilities ?? [])]);
-    if (!extension.enabled || !types.has('metadata_provider')) continue;
-    ProviderRegistry.register(createExtensionProviderAdapter(extension));
+    const types = new Set([...(extension.types ?? []), ...extensionCapabilityNames(extension.capabilities)]);
+    if (!extension.enabled || (!extension.has_metadata_provider && !types.has('metadata_provider'))) continue;
+    ProviderRegistry.register(createExtensionProviderAdapter(extension, overrides[extension.id]));
     registeredExtensionProviders.add(extension.id);
   }
 }

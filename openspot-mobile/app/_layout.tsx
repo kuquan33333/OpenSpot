@@ -5,12 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useThemeMode, ThemeModeProvider } from '@/hooks/theme-mode';
 import { AppInitializationProvider, useAppInitialization } from '@/lib/app-initialization';
 import { LikedSongsProvider } from '@/hooks/useLikedSongs';
-import { useApiStatus } from '@/hooks/useApiStatus';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import '@/lib/i18n';
 
@@ -19,32 +17,6 @@ SplashScreen.preventAutoHideAsync();
 function AppNavigation() {
   const { resolvedScheme, ready: themeReady } = useThemeMode();
   const { ready: appReady } = useAppInitialization();
-  const { apiStatus, loading } = useApiStatus();
-  const PROVIDER_KEY = 'openspot_provider_v1';
-
-  useEffect(() => {
-    const checkAndSwitchProvider = async () => {
-      if (loading || !apiStatus) return;
-
-      try {
-        const currentProvider = await AsyncStorage.getItem(PROVIDER_KEY);
-        if (!currentProvider) return;
-
-        if (currentProvider === 'ytmusic' && apiStatus.ytmusic?.disabled) {
-          await AsyncStorage.setItem(PROVIDER_KEY, 'saavn');
-          console.log('Auto-switched provider from ytmusic to saavn (ytmusic disabled)');
-        } else if (currentProvider === 'saavn' && apiStatus.saavn?.disabled) {
-          await AsyncStorage.setItem(PROVIDER_KEY, 'ytmusic');
-          console.log('Auto-switched provider from saavn to ytmusic (saavn disabled)');
-        }
-      } catch (error) {
-        console.error('Failed to check/switch provider:', error);
-      }
-    };
-
-    checkAndSwitchProvider();
-  }, [apiStatus, loading]);
-
   if (!appReady || !themeReady) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: resolvedScheme === 'dark' ? '#050505' : '#f5efe6' }}>

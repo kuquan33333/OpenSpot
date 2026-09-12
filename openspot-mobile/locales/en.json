@@ -44,7 +44,15 @@
     "ready_to_explore": "Ready to explore?",
     "shuffle_liked": "Shuffle Liked",
     "continue_listening": "Continue Listening",
-    "see_all": "See All"
+    "see_all": "See All",
+    "loading_recommendations": "Loading recommendations from Extensions…",
+    "no_extension_recommendations": "Enable an Extension with search and home capabilities to see recommendations.",
+    "section_trending": "Trending",
+    "section_remix": "Remix",
+    "section_vinahouse": "VinaHouse",
+    "section_vietnamese": "Vietnamese music",
+    "section_edm": "EDM",
+    "section_chill": "Chill"
   },
   "player": {
     "now_playing": "Now Playing",

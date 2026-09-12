@@ -29,6 +29,7 @@ export const isExtensionCoreAvailable = (): boolean => isTauriRuntime();
 
 export const extensionCoreBridge = {
   isAvailable: isExtensionCoreAvailable,
+  setAppVersion: (version: string) => callCore<void>('SetAppVersion', [version]),
   initialize: () => callCore<void>('init'),
   loadFromDirectory: (directory: string) => callCore<{ loaded: number; errors: string[] }>('LoadExtensionsFromDir', [directory]),
   loadFromPath: (filePath: string) => callCore<InstalledExtension>('LoadExtensionFromPath', [filePath]),

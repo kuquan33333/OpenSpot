@@ -15,17 +15,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import * as FileSystem from 'expo-file-system';
+import Constants from 'expo-constants';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
 import { fileUriToPath, pathToFileUri } from '@/lib/extensions/file-system-paths';
 import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
-import type { ExtensionHealthResult, InstalledExtension, RepositoryExtension } from '@/lib/extensions/extension-types';
+import { extensionCapabilityNames, type ExtensionHealthResult, type InstalledExtension, type RepositoryExtension } from '@/lib/extensions/extension-types';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { getExtensionCapabilityOverrides, setExtensionCapabilityEnabled, type ExtensionCapability, type ExtensionCapabilityOverrides } from '@/lib/providers/extension-capability-settings';
 
 type ExtensionPage = 'store' | 'installed' | 'priority' | 'fallback';
 
 const DEFAULT_REPOSITORY_URL = process.env.EXPO_PUBLIC_EXTENSION_REGISTRY_URL?.trim() ?? '';
+const APP_VERSION = Constants.expoConfig?.version ?? '3.1.5';
 
 function extensionTitle(extension: InstalledExtension | RepositoryExtension): string {
   return ('display_name' in extension && extension.display_name) || extension.name || extension.id;
@@ -62,6 +65,7 @@ export default function ExtensionsScreen() {
   const [busyID, setBusyID] = useState<string | null>(null);
   const [expandedID, setExpandedID] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [capabilityOverrides, setCapabilityOverrides] = useState<ExtensionCapabilityOverrides>({});
 
   const theme = useMemo(() => ({
     background: isDark ? '#050505' : '#f5efe6',
@@ -81,6 +85,7 @@ export default function ExtensionsScreen() {
     if (!documentDirectory) throw new Error('Extension storage directory is unavailable');
     const cacheDirectory = FileSystem.cacheDirectory ?? documentDirectory;
     const extensionsDirectory = `${documentDirectory}extensions/`;
+    await extensionCoreBridge.setAppVersion(APP_VERSION);
     await extensionCoreBridge.initialize(
       fileUriToPath(extensionsDirectory),
       fileUriToPath(`${documentDirectory}extension-data`),
@@ -105,8 +110,20 @@ export default function ExtensionsScreen() {
     setInstalled(items);
     setPriority(configuredPriority);
     setFallback(configuredFallback ?? []);
-    await syncExtensionProviders();
+    setCapabilityOverrides(await getExtensionCapabilityOverrides());
+    await syncExtensionProviders(APP_VERSION);
   }, [text]);
+
+  const toggleCapability = async (extension: InstalledExtension, capability: ExtensionCapability) => {
+    const enabled = capabilityOverrides[extension.id]?.[capability] !== false;
+    try {
+      const next = await setExtensionCapabilityEnabled(extension.id, capability, !enabled);
+      setCapabilityOverrides(next);
+      await syncExtensionProviders(APP_VERSION);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
 
   const loadRepository = useCallback(async (forceRefresh = false) => {
     if (!extensionCoreBridge.isAvailable()) return;
@@ -339,8 +356,22 @@ export default function ExtensionsScreen() {
             </View>
             {expandedID === extension.id && <View style={[styles.details, { backgroundColor: theme.elevated }]}>
               {!!extension.homepage && <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.homepage', 'Homepage')}: {extension.homepage}</Text>}
-              <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.capabilities', 'Capabilities')}: {(extension.capabilities ?? extension.types ?? []).join(' · ') || text('extensions.none', 'None')}</Text>
+              <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.capabilities', 'Capabilities')}: {extensionCapabilityNames(extension.capabilities).concat(extension.types ?? []).filter((value, index, values) => values.indexOf(value) === index).join(' · ') || text('extensions.none', 'None')}</Text>
               {!!extension.permissions?.length && <Text style={[styles.meta, { color: theme.secondary }]}>{text('extensions.permissions', 'Permissions')}: {extension.permissions.join(' · ')}</Text>}
+              <Text style={[styles.meta, { color: theme.secondary, marginTop: 8 }]}>{text('extensions.capability_controls', 'Provider capabilities')}</Text>
+              {(['search', 'home', 'stream', 'download'] as ExtensionCapability[]).map((capability) => {
+                const available = capability === 'download'
+                  ? Boolean(extension.has_metadata_provider || extension.has_download_provider)
+                  : Boolean(extension.has_metadata_provider);
+                if (!available) return null;
+                const enabled = capabilityOverrides[extension.id]?.[capability] !== false;
+                return (
+                  <Pressable key={capability} style={styles.capabilityRow} onPress={() => void toggleCapability(extension, capability)}>
+                    <Text style={[styles.meta, { color: theme.text }]}>{text(`extensions.capability_${capability}`, capability)}</Text>
+                    <View style={[styles.switch, { backgroundColor: enabled ? theme.accent : theme.border }]}><View style={[styles.switchThumb, enabled && styles.switchThumbOn]} /></View>
+                  </Pressable>
+                );
+              })}
             </View>}
           </View>
         );
@@ -470,6 +501,7 @@ const styles = StyleSheet.create({
   listGap: { gap: 12 },
   card: { borderWidth: 1, borderRadius: 16, padding: 14, gap: 9 },
   details: { borderRadius: 11, padding: 10, gap: 5 },
+  capabilityRow: { minHeight: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   rowStart: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   flexOne: { flex: 1 },
   extensionIcon: { width: 48, height: 48, borderRadius: 13, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

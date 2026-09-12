@@ -1,14 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { MusicApi } from '../api';
-import { YTMusicAPI } from '../ytmusic-api';
 import { recordDiagnostic } from '../diagnostics';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
 import { parseStoredJSON } from '@/lib/storage-validation';
 import type { SearchParams, SearchResponse, Track } from '../../types/music';
 
 export type ProviderId = string;
-export type ProviderCapability = 'search' | 'stream' | 'download';
+export type ProviderCapability = 'search' | 'stream' | 'download' | 'home';
+
+export interface HomeSectionDefinition {
+  id: string;
+  query: string;
+}
+
+export interface ProviderHomeSection extends HomeSectionDefinition {
+  providerId: ProviderId;
+  tracks: Track[];
+}
 
 export interface ProviderAdapter {
   id: ProviderId;
@@ -35,7 +43,6 @@ export type ProviderRegistryEvent =
 
 const LEGACY_PROVIDER_KEY = 'openspot_provider_v1';
 const PROVIDER_PRIORITY_KEY = 'openspot_provider_priority_v2';
-const BUILTIN_PROVIDER_IDS = new Set(['saavn', 'ytmusic']);
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -77,39 +84,11 @@ function trackMatchScore(source: Track, candidate: Track): number {
   return score;
 }
 
-const saavnProvider: ProviderAdapter = {
-  id: 'saavn',
-  displayName: 'Saavn',
-  capabilities: new Set<ProviderCapability>(['search', 'stream', 'download']),
-  search: (params) => MusicApi.search(params),
-  searchTracks: (query, page = 1, limit = 20) => MusicApi.searchTracks(query, page, limit),
-  getStreamUrl: (trackId) => MusicApi.getStreamUrl(trackId),
-  getDownloadUrl: (trackId) => MusicApi.getStreamUrl(trackId),
-};
-
-const youtubeProvider: ProviderAdapter = {
-  id: 'ytmusic',
-  displayName: 'YouTube Music',
-  capabilities: new Set<ProviderCapability>(['search', 'stream', 'download']),
-  search: async (params) => {
-    if (params.type && params.type !== 'track') {
-      throw new Error(`Provider ytmusic does not support search type: ${params.type}`);
-    }
-    return YTMusicAPI.search({ q: params.q, type: params.type });
-  },
-  searchTracks: (query) => YTMusicAPI.search({ q: query, type: 'track' }),
-  getStreamUrl: (trackId) => YTMusicAPI.getStreamUrl(trackId),
-  getDownloadUrl: (trackId) => YTMusicAPI.getDownloadUrl(trackId),
-};
-
 class ProviderRegistryImpl {
   private readonly providers = new Map<ProviderId, ProviderAdapter>();
   private readonly listeners = new Set<(event: ProviderRegistryEvent) => void>();
 
-  constructor() {
-    this.register(saavnProvider);
-    this.register(youtubeProvider);
-  }
+  constructor() {}
 
   register(provider: ProviderAdapter): void {
     if (!provider.id.trim()) throw new Error('Provider id must not be empty');
@@ -197,7 +176,8 @@ class ProviderRegistryImpl {
     try {
       if (extensionCoreBridge.isAvailable()) {
         const configured = await extensionCoreBridge.getFallbackProviderIds();
-        fallbackExtensionIDs = Array.isArray(configured) ? configured.map((id) => id.toLowerCase()) : null;
+        const configuredIds = Array.isArray(configured) ? configured.map((id) => id.toLowerCase()) : [];
+        fallbackExtensionIDs = configuredIds.length > 0 ? configuredIds : null;
       }
     } catch (error) {
       recordDiagnostic({ category: 'extension', type: 'fallback_read_failed', data: { error: errorMessage(error) } });
@@ -208,7 +188,7 @@ class ProviderRegistryImpl {
       .filter((provider): provider is ProviderAdapter => {
         if (!provider) return false;
         const explicit = Boolean(hint && provider.id === hint);
-        if (BUILTIN_PROVIDER_IDS.has(provider.id) || explicit || fallbackExtensionIDs === null) return true;
+        if (explicit || fallbackExtensionIDs === null) return true;
         return fallbackExtensionIDs.includes(provider.id.toLowerCase());
       });
   }
@@ -252,6 +232,25 @@ class ProviderRegistryImpl {
 
     if (emptyResult) return emptyResult;
     throw lastError instanceof Error ? lastError : new Error('No track search provider is currently available');
+  }
+
+  async getHomeSections(definitions: HomeSectionDefinition[], limit = 12): Promise<ProviderHomeSection[]> {
+    const providers = (await this.orderedProviders()).filter((provider) => provider.capabilities.has('home'));
+    const sections: ProviderHomeSection[] = [];
+    for (const definition of definitions) {
+      for (const provider of providers) {
+        try {
+          const response = await provider.searchTracks(definition.query, 1, limit);
+          if (response.tracks.length > 0) {
+            sections.push({ ...definition, providerId: provider.id, tracks: response.tracks.slice(0, limit) });
+            break;
+          }
+        } catch (error) {
+          recordDiagnostic({ category: 'provider', type: 'home_section_failed', message: errorMessage(error), data: { providerId: provider.id, sectionId: definition.id } });
+        }
+      }
+    }
+    return sections;
   }
 
   private async findEquivalentTrack(provider: ProviderAdapter, sourceTrack: Track): Promise<Track | null> {

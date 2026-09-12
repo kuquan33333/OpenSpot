@@ -322,6 +322,13 @@ func CallOpenSpotExtensionJSON(operation, payloadJSON string) (string, error) {
 	}
 
 	switch operation {
+	case "SetAppVersion":
+		value, callErr := stringArg(0)
+		if callErr != nil {
+			return "", callErr
+		}
+		SetAppVersion(value)
+		return "null", nil
 	case "SetExtensionStorageMasterKey":
 		value, callErr := stringArg(0)
 		if callErr != nil {

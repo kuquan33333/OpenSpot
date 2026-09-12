@@ -24,7 +24,7 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 - [~] P6 extension repository/store — registry/cache/download APIs, package lifecycle bridge and desktop Go sidecar are implemented; live repository verification pending
 - [~] P7 extension UI — mobile/desktop store, detail, install/update/remove and health controls are wired; device verification pending
 - [~] P8 provider priority/fallback — provider-neutral priority, metadata aggregation and fallback resolution are wired; live extension provider verification pending
-- [~] P9 first-party providers migrated — built-ins remain behind the neutral registry and installed extension adapters are wired; provider migration/live verification pending
+- [x] P9 first-party providers migrated — built-in Saavn/YouTube/Kworb provider paths are removed from the app runtime; enabled Extension adapters now supply metadata/search/stream/download/home
 - [x] P10 Search bottom tab replaced with Mix
 - [~] P11-P19 SimpMusic AutoMix engine parity — planner, equal-power transition, filter/ramp contracts, settings, overlapping mobile/desktop players and takeover are wired; device/DSP edge-case QA pending
 - [~] P20-P21 Mix UI/settings — mobile/desktop controls and persistence added; live playback binding pending
@@ -39,6 +39,9 @@ Master plan: `docs/OPENSPOT_VNEXT_MASTER_PLAN.md`
 - Rust formatting passes locally. A Windows `cargo check --locked` is blocked only by the intentionally untracked target-named sidecar; the manual check workflow now builds the Linux Go sidecar before running Cargo metadata validation.
 - Sidecar smoke test passes JSON request/response and creates a persistent 32-byte storage key.
 - Locale/config JSON checks and `git diff --check` pass. Mobile and desktop lint/typecheck pass with warnings only; deterministic AutoMix and Extension bridge response regressions pass on both platforms.
+- The current provider path has no built-in Saavn/YouTube/Kworb registration or desktop Saavn proxy route. Home recommendation sections are runtime search intents resolved through enabled Extensions, including translated Vietnamese, remix, VinaHouse, EDM and chill sections.
+- Extension capability payloads are normalized for both legacy arrays and the current native object/map shape; a regression test now exercises the map shape that previously caused Hermes `iterator method is not callable`.
+- Library route and its mounted playback components pass the AST JSX-text boundary scan; Library/FullScreenPlayer async storage flows have error boundaries and diagnostic catches. The supplied IPS still lacks the JavaScript component stack, so only device confirmation can close the remaining runtime QA item.
 - The iOS crash reports supplied from build 37 all terminate in `com.facebook.react.ExceptionsManagerQueue` with `EXC_CRASH/SIGABRT`; the matching raw JSX whitespace nodes were removed from Mix and both Library branches, and the mobile whitespace guard passes.
 - Mobile Extension Core host paths now convert Expo `file://` URIs to native filesystem paths before Go initialization, repository downloads, package loading and cleanup. Provider adapters are re-synced after the native core is initialized or an extension changes state.
 - Saavn requests now use the configured endpoint with the standard JioSaavn endpoint as a fallback, proxy all operations including `song.getDetails`, and preserve actionable network errors. A live probe returned valid search and song-detail payloads through the proxy.
@@ -93,11 +96,11 @@ Temporary diagnostic workflows used while locating the dependency leak were remo
 
 1. Mobile Android/iOS share the Expo/React Native project and are generated via Expo prebuild in the manual build workflows.
 2. Desktop uses a React/Expo web shell packaged with Tauri 2 and Rust `src-tauri`, so playback/extension native adapters must be platform-specific while exposing the same higher-level contracts.
-3. Existing `MusicAPI` hard-coded Saavn/YouTube selection. This is being replaced by a provider-neutral registry before the Extension runtime is connected.
+3. Existing `MusicAPI` hard-coded Saavn/YouTube selection has been removed; provider registration and search/stream/download/home routing are now Extension-first.
 4. Mobile and desktop Track models originally restricted `provider` to `'saavn' | 'ytmusic'`; this blocked extension provider IDs and has been widened to `string`.
 5. ProviderRegistry supports registration, dynamic IDs, priority persistence, search fallback, stream/download fallback and equivalent-track matching across providers. It is transitional host infrastructure for the Extension Provider bridge.
 6. Playback components currently own TrackPlayer setup/reset behavior. Player lifecycle remains a P1 target so the UI does not own long-lived playback state.
-7. Saavn API construction currently depends directly on `EXPO_PUBLIC_API_BASE_URL`; environment/fallback validation remains a P1 hardening item.
+7. The former desktop Saavn proxy and legacy YouTube provider module are no longer part of the app runtime; provider availability now comes from the Extension Core registry and explicit capability overrides.
 
 ## Current work block
 
