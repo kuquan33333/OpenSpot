@@ -61,10 +61,26 @@ jobs:
 
       - name: Select Xcode 16 toolchain
         run: |
-          XCODE_PATH="$(ls -d /Applications/Xcode_16*.app 2>/dev/null | tail -1 || true)"
+          XCODE_PATH=""
+          for candidate in /Applications/Xcode_16.4*.app /Applications/Xcode_16.3*.app /Applications/Xcode_16.2*.app; do
+            [ -d "$candidate" ] || continue
+            if DEVELOPER_DIR="$candidate/Contents/Developer" xcrun --sdk iphoneos --show-sdk-path >/dev/null 2>&1; then
+              XCODE_PATH="$candidate"
+              break
+            fi
+          done
+          if [ -z "$XCODE_PATH" ]; then
+            for candidate in /Applications/Xcode_16*.app; do
+              [ -d "$candidate" ] || continue
+              XCODE_PATH="$candidate"
+              break
+            done
+          fi
           test -n "$XCODE_PATH"
           sudo xcode-select --switch "$XCODE_PATH/Contents/Developer"
           xcodebuild -version
+          xcodebuild -showsdks
+          xcrun --sdk iphoneos --show-sdk-path
 
       - name: Setup Go for Extension Core
         uses: actions/setup-go@v5
