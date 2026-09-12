@@ -17,6 +17,7 @@ import * as FileSystem from 'expo-file-system';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
+import { fileUriToPath, pathToFileUri } from '@/lib/extensions/file-system-paths';
 import type { ExtensionHealthResult, InstalledExtension, RepositoryExtension } from '@/lib/extensions/extension-types';
 
 type ExtensionPage = 'store' | 'installed' | 'priority' | 'fallback';
@@ -77,10 +78,10 @@ export default function ExtensionsScreen() {
     if (!documentDirectory) throw new Error('Extension storage directory is unavailable');
     const cacheDirectory = FileSystem.cacheDirectory ?? documentDirectory;
     await extensionCoreBridge.initialize(
-      `${documentDirectory}extensions`,
-      `${documentDirectory}extension-data`,
+      fileUriToPath(`${documentDirectory}extensions`),
+      fileUriToPath(`${documentDirectory}extension-data`),
     );
-    await extensionCoreBridge.initRepository(`${cacheDirectory}extension-repository`);
+    await extensionCoreBridge.initRepository(fileUriToPath(`${cacheDirectory}extension-repository`));
   }, []);
 
   const loadInstalled = useCallback(async () => {
@@ -195,9 +196,10 @@ export default function ExtensionsScreen() {
       if (!extensionCoreBridge.isAvailable()) throw new Error(text('extensions.native_unavailable', 'Extension Core is not available in this build yet.'));
       const documentDirectory = FileSystem.documentDirectory;
       if (!documentDirectory) throw new Error(text('extensions.storage_unavailable', 'Extension storage is unavailable.'));
-      const packageDirectory = `${FileSystem.cacheDirectory ?? documentDirectory}extension-packages/`;
-      const packageDirectoryInfo = await FileSystem.getInfoAsync(packageDirectory);
-      if (!packageDirectoryInfo.exists) await FileSystem.makeDirectoryAsync(packageDirectory, { intermediates: true });
+      const packageDirectoryURI = `${FileSystem.cacheDirectory ?? documentDirectory}extension-packages/`;
+      const packageDirectory = fileUriToPath(packageDirectoryURI);
+      const packageDirectoryInfo = await FileSystem.getInfoAsync(packageDirectoryURI);
+      if (!packageDirectoryInfo.exists) await FileSystem.makeDirectoryAsync(packageDirectoryURI, { intermediates: true });
       packagePath = await extensionCoreBridge.downloadRepositoryExtension(extension.id, packageDirectory);
       const result = extension.is_installed || extension.has_update
         ? await extensionCoreBridge.upgradeFromPath(packagePath)
@@ -208,7 +210,7 @@ export default function ExtensionsScreen() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      if (packagePath) await FileSystem.deleteAsync(packagePath, { idempotent: true }).catch(() => {});
+      if (packagePath) await FileSystem.deleteAsync(pathToFileUri(packagePath), { idempotent: true }).catch(() => {});
       setBusyID(null);
     }
   };
