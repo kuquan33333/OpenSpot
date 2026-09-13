@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "updated_at": "2026-09-13T00:00:00Z",
+  "extensions": [
+    {
+      "id": "soundcloud",
+      "name": "soundcloud",
+      "display_name": "SoundCloud",
+      "version": "1.0.9",
+      "description": "SoundCloud metadata, playback, search, Home trending recommendations, and direct audio downloads.",
+      "download_url": "https://raw.githubusercontent.com/kuquan33333/OpenSpot/feature/openspot-vnext-extension-automix/docs/fixtures/soundcloud-openspot.sflx",
+      "category": "download",
+      "tags": [
+        "soundcloud",
+        "metadata",
+        "playback",
+        "search",
+        "home",
+        "download"
+      ],
+      "downloads": 0,
+      "updated_at": "2026-09-13T00:00:00Z",
+      "min_app_version": "4.9.1",
+      "sha256": "a48ed9975d9e04019edcf1fd7934c66b84058e397b510de6e36c5bf8941f4da4"
+    }
+  ]
+}
