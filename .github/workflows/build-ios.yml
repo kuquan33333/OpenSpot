@@ -200,10 +200,15 @@ jobs:
         run: |
           sed -i '' 's/--dev true/--dev false/g' ios/*/project.pbxproj || true
 
+      - name: Verify generated React Native sources
+        run: |
+          test -f ios/build/generated/ios/safeareacontextJSI-generated.cpp
+          test -f ios/build/generated/ios/safeareacontext/safeareacontext-generated.mm
+          test -f ios/build/generated/ios/RCTAppDependencyProvider.mm
+
       - name: Build Archive (unsigned)
         run: |
           rm -rf "$RUNNER_TEMP/openspot-derived-data-$GITHUB_SHA"
-          rm -rf ios/build
           cd ios
           xcodebuild archive \
             -workspace $APP_NAME.xcworkspace \
