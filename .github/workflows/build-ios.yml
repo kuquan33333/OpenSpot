@@ -16,14 +16,6 @@ jobs:
         with:
           node-version: 20
 
-      - name: Cache npm download cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-preflight-npm-${{ hashFiles('openspot-mobile/package.json', 'openspot-desktop/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-preflight-npm-
-
       - name: Mobile lint, typecheck and regressions
         working-directory: openspot-mobile
         run: |
@@ -46,8 +38,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
-          cache: true
-          cache-dependency-path: third_party/spotiflac-extension-core/upstream/go.sum
+          cache: false
 
       - name: Go format, vet and test
         working-directory: third_party/spotiflac-extension-core/upstream
@@ -98,6 +89,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Remove generated build state
+        run: |
+          rm -rf "$RUNNER_TEMP/openspot-derived-data-$GITHUB_SHA"
+          rm -rf ios/build
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -111,7 +107,6 @@ jobs:
             delete pkg.dependencies['expo-dev-client'];
             delete pkg.dependencies['expo-dev-menu'];
             delete pkg.dependencies['expo-dev-launcher'];
-            pkg.dependencies['expo-asset'] = '~11.1.6';
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
             
             const app = JSON.parse(fs.readFileSync('app.json', 'utf8'));
@@ -122,16 +117,10 @@ jobs:
             fs.writeFileSync('app.json', JSON.stringify(app, null, 2));
           "
 
-      - name: Cache npm download cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('openspot-mobile/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
-
       - name: Install dependencies
-        run: npm install
+        env:
+          npm_config_cache: ${{ runner.temp }}/openspot-npm-${{ github.sha }}
+        run: npm install --no-audit --no-fund --prefer-online
 
       - name: Select Xcode 16 toolchain
         run: |
@@ -160,8 +149,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: third_party/spotiflac-extension-core/upstream/go.mod
-          cache: true
-          cache-dependency-path: third_party/spotiflac-extension-core/upstream/go.sum
+          cache: false
 
       - name: Build Extension Core iOS framework
         run: |
@@ -187,17 +175,6 @@ jobs:
       - name: Prebuild iOS
         run: npx expo prebuild --platform ios --clean
 
-      - name: Restore CocoaPods cache
-        id: pods-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/Library/Caches/CocoaPods
-            openspot-mobile/ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('openspot-mobile/package.json', 'openspot-mobile/app.json', 'openspot-mobile/modules/**/*.podspec', 'openspot-mobile/modules/**/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-
       - name: Install Pods
         run: |
           cd ios
@@ -207,26 +184,6 @@ jobs:
           # Keep the workaround scoped to fmt; React Native targets retain
           # their generated language-standard settings.
           ruby -rxcodeproj -e 'project = Xcodeproj::Project.open("Pods/Pods.xcodeproj"); target = project.targets.find { |candidate| candidate.name == "fmt" }; abort "fmt target not found" unless target; target.build_configurations.each { |configuration| configuration.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++17" }; project.save'
-
-      - name: Save CocoaPods cache
-        if: always() && steps.pods-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/Library/Caches/CocoaPods
-            openspot-mobile/ios/Pods
-          key: ${{ steps.pods-cache.outputs.cache-primary-key }}
-
-      - name: Restore Xcode derived data cache
-        id: xcode-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: openspot-mobile/ios/build/DerivedData
-          key: ${{ runner.os }}-xcode-${{ github.ref_name }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-xcode-${{ github.ref_name }}-
-            ${{ runner.os }}-xcode-
 
       - name: Bundle JS (Hermes production)
         run: |
@@ -245,6 +202,8 @@ jobs:
 
       - name: Build Archive (unsigned)
         run: |
+          rm -rf "$RUNNER_TEMP/openspot-derived-data-$GITHUB_SHA"
+          rm -rf ios/build
           cd ios
           xcodebuild archive \
             -workspace $APP_NAME.xcworkspace \
@@ -261,16 +220,8 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" \
             ONLY_ACTIVE_ARCH=NO \
             SWIFT_ENABLE_EXPLICIT_MODULES=NO \
-            -derivedDataPath build/DerivedData \
+            -derivedDataPath "$RUNNER_TEMP/openspot-derived-data-$GITHUB_SHA" \
             -jobs 3
-
-      - name: Save Xcode derived data cache
-        if: always() && steps.xcode-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: openspot-mobile/ios/build/DerivedData
-          key: ${{ steps.xcode-cache.outputs.cache-primary-key }}
 
       - name: Verify bundle inside app
         run: |

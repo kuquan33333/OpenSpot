@@ -20,6 +20,7 @@ import Constants from 'expo-constants';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { extensionCoreBridge } from '@/lib/extensions/extension-core-bridge';
 import { fileUriToPath, pathToFileUri } from '@/lib/extensions/file-system-paths';
+import { initializeExtensionRuntime } from '@/lib/extensions/extension-runtime';
 import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
 import { extensionCapabilityNames, getExtensionCompatibilityError, type ExtensionHealthResult, type InstalledExtension, type RepositoryExtension } from '@/lib/extensions/extension-types';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -80,21 +81,7 @@ export default function ExtensionsScreen() {
   const text = useCallback((key: string, fallbackText: string) => t(key, { defaultValue: fallbackText }), [t]);
 
   const initializeCore = useCallback(async () => {
-    if (!extensionCoreBridge.isAvailable()) return;
-    const documentDirectory = FileSystem.documentDirectory;
-    if (!documentDirectory) throw new Error('Extension storage directory is unavailable');
-    const cacheDirectory = FileSystem.cacheDirectory ?? documentDirectory;
-    const extensionsDirectory = `${documentDirectory}extensions/`;
-    await extensionCoreBridge.setAppVersion(APP_VERSION);
-    await extensionCoreBridge.initialize(
-      fileUriToPath(extensionsDirectory),
-      fileUriToPath(`${documentDirectory}extension-data`),
-    );
-    const loadResult = await extensionCoreBridge.loadFromDirectory(fileUriToPath(extensionsDirectory));
-    if (loadResult.errors.length > 0) {
-      console.warn('[Extensions] some persisted packages could not be restored:', loadResult.errors);
-    }
-    await extensionCoreBridge.initRepository(fileUriToPath(`${cacheDirectory}extension-repository`));
+    await initializeExtensionRuntime(APP_VERSION);
   }, []);
 
   const loadInstalled = useCallback(async () => {

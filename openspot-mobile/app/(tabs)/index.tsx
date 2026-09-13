@@ -18,6 +18,8 @@ import { useThemeMode, ThemeMode } from '@/hooks/theme-mode';
 import { GreetingHeader } from '@/components/GreetingHeader';
 import { QuickActions } from '@/components/QuickActions';
 import { SectionHeader } from '@/components/SectionHeader';
+import Constants from 'expo-constants';
+import { syncExtensionProviders } from '@/lib/providers/extension-provider-adapter';
 
 const REGION_OVERRIDE_KEY = 'openspot_region_override_v1';
 const LANGUAGE_KEY = 'openspot_language_v1';
@@ -61,6 +63,7 @@ export default function HomeScreen() {
   const [setupModalReady, setSetupModalReady] = useState(false);
   const [setupPicker, setSetupPicker] = useState<'language' | 'region' | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const appVersion = Constants.expoConfig?.version ?? '4.9.1';
 
   const languageOptions: { label: string; value: string; nativeLabel: string }[] = [
     { label: 'English', value: 'en', nativeLabel: 'English' },
@@ -136,6 +139,9 @@ export default function HomeScreen() {
     const loadHome = async () => {
       setHomeLoading(true);
       try {
+        // Home may mount before the user has opened Extensions. Syncing here
+        // makes provider discovery deterministic on a fresh launch as well.
+        await syncExtensionProviders(appVersion);
         const sections = await MusicAPI.getHomeSections();
         if (mounted) setHomeSections(sections);
       } catch (error) {
@@ -147,7 +153,7 @@ export default function HomeScreen() {
     };
     void loadHome();
     return () => { mounted = false; };
-  }, []);
+  }, [appVersion]);
 
   const handleViewChange = (view: 'home' | 'search') => {
     setCurrentView(view);

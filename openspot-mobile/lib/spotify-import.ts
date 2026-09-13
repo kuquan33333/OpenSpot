@@ -2,25 +2,37 @@ import { Track } from '../types/music';
 import { MusicAPI } from './music-api';
 import { PlaylistStorage } from './playlist-storage';
 
-const SPOTIFY_FETCHER_DOMAIN = process.env.EXPO_PUBLIC_SPOTIFY_FETCHER_DOMAIN;
-
-if (!SPOTIFY_FETCHER_DOMAIN) {
-  throw new Error('EXPO_PUBLIC_SPOTIFY_FETCHER_DOMAIN env var is not set');
-}
-
-const SPOTIFY_FETCHER_URL = `https://api.${SPOTIFY_FETCHER_DOMAIN}.com/v2/Transfer`;
 const SPOTIFY_FETCHER_TOKEN_URL = 'https://raw.githubusercontent.com/BlackHatDevX/openspot-config/refs/heads/main/spotify-playlist-token.json';
 
-const SPOTIFY_FETCHER_HEADERS: Record<string, string> = {
-  'Accept': '*/*',
-  'Content-Type': 'application/json',
-  'Accept-Language': 'en-US,en;q=0.7',
-  'Origin': `https://www.${SPOTIFY_FETCHER_DOMAIN}.com`,
-  'Referer': `https://www.${SPOTIFY_FETCHER_DOMAIN}.com/`,
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
-  'x-original-URL': `https://www.${SPOTIFY_FETCHER_DOMAIN}.com/transfer/spotify-to-file`,
-  'Cookie': 'ttune=CIKLZkA%22kvvNs]mvkswo[IHIZkA%22kvvNs]mvkswo[M_QeSMrkxqo]IF; PHPSESSID=nk86nb127ufvqlk4pv1f93dslv; TMM_Unique_Cross=X5BOG2LK94NZKMWFYLZH5KYUUNXXVMDFIAEBAIHB',
-};
+interface SpotifyFetcherConfig {
+  url: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * This must stay lazy. Library is a normal route and must remain renderable
+ * when the optional Spotify-import secret is not present in an IPA build.
+ */
+function getSpotifyFetcherConfig(): SpotifyFetcherConfig {
+  const domain = process.env.EXPO_PUBLIC_SPOTIFY_FETCHER_DOMAIN?.trim();
+  if (!domain) {
+    throw new Error('Spotify playlist import is unavailable: EXPO_PUBLIC_SPOTIFY_FETCHER_DOMAIN is not configured');
+  }
+
+  return {
+    url: `https://api.${domain}.com/v2/Transfer`,
+    headers: {
+      'Accept': '*/*',
+      'Content-Type': 'application/json',
+      'Accept-Language': 'en-US,en;q=0.7',
+      'Origin': `https://www.${domain}.com`,
+      'Referer': `https://www.${domain}.com/`,
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+      'x-original-URL': `https://www.${domain}.com/transfer/spotify-to-file`,
+      'Cookie': 'ttune=CIKLZkA%22kvvNs]mvkswo[IHIZkA%22kvvNs]mvkswo[M_QeSMrkxqo]IF; PHPSESSID=nk86nb127ufvqlk4pv1f93dslv; TMM_Unique_Cross=X5BOG2LK94NZKMWFYLZH5KYUUNXXVMDFIAEBAIHB',
+    },
+  };
+}
 
 async function getSpotifyFetcherToken(): Promise<string> {
   const res = await fetch(SPOTIFY_FETCHER_TOKEN_URL);
@@ -38,11 +50,12 @@ export async function importSpotifyPlaylist(
 ): Promise<{ success: boolean; matched: number; total: number }> {
   onProgress?.('Fetching playlist...');
 
+  const spotifyFetcher = getSpotifyFetcherConfig();
   const account = await getSpotifyFetcherToken();
 
-  const loadLibraryRes = await fetch(`${SPOTIFY_FETCHER_URL}/LoadLibrary`, {
+  const loadLibraryRes = await fetch(`${spotifyFetcher.url}/LoadLibrary`, {
     method: 'POST',
-    headers: SPOTIFY_FETCHER_HEADERS,
+    headers: spotifyFetcher.headers,
     body: JSON.stringify({
       source: 'Spotify',
       account,
@@ -73,9 +86,9 @@ export async function importSpotifyPlaylist(
 
   onProgress?.('Loading tracks...');
 
-  const loadTracksRes = await fetch(`${SPOTIFY_FETCHER_URL}/LoadPlaylistTracks`, {
+  const loadTracksRes = await fetch(`${spotifyFetcher.url}/LoadPlaylistTracks`, {
     method: 'POST',
-    headers: SPOTIFY_FETCHER_HEADERS,
+    headers: spotifyFetcher.headers,
     body: JSON.stringify({
       source: 'Spotify',
       account,

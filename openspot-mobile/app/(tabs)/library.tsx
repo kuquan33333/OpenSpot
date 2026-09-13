@@ -8,6 +8,7 @@ import { MusicPlayerContext } from './_layout';
 import { Ionicons } from '@expo/vector-icons';
 import { PlaylistStorage, Playlist } from '@/lib/playlist-storage';
 import { MusicAPI } from '@/lib/music-api';
+import { Track } from '@/types/music';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTranslation } from 'react-i18next';
@@ -63,7 +64,7 @@ function LibraryScreenContent() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-  const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
+  const [playlistTracks, setPlaylistTracks] = useState<Track[]>([]);
   const [showLikedSongs, setShowLikedSongs] = useState(false);
   const [savedMedia, setSavedMedia] = useState<SavedMediaItem[]>([]);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -74,20 +75,25 @@ function LibraryScreenContent() {
   const [playlistCovers, setPlaylistCovers] = useState<Record<string, string>>({});
 
   const fetchSavedMedia = useCallback(async () => {
-    const allKeys = await AsyncStorage.getAllKeys();
-    const savedKeys = allKeys.filter(key => key.startsWith('saved_'));
-    const savedItems = await Promise.all(
-      savedKeys.map(async (key) => {
-        try {
-          const data = await AsyncStorage.getItem(key);
-          return normalizeSavedMedia(parseStoredJSON<unknown>(data, key, null));
-        } catch (error) {
-          console.warn(`[Library] Failed to load saved media ${key}`, error);
-          return null;
-        }
-      })
-    );
-    setSavedMedia(savedItems.flatMap((item) => item ? [item] : []));
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const savedKeys = allKeys.filter(key => key.startsWith('saved_'));
+      const savedItems = await Promise.all(
+        savedKeys.map(async (key) => {
+          try {
+            const data = await AsyncStorage.getItem(key);
+            return normalizeSavedMedia(parseStoredJSON<unknown>(data, key, null));
+          } catch (error) {
+            console.warn(`[Library] Failed to load saved media ${key}`, error);
+            return null;
+          }
+        })
+      );
+      setSavedMedia(savedItems.filter((item): item is SavedMediaItem => item !== null));
+    } catch (error) {
+      console.warn('[Library] Failed to read saved media keys', error);
+      setSavedMedia([]);
+    }
   }, []);
 
   const handleRemoveSavedMedia = async (key: string) => {
@@ -292,7 +298,7 @@ function LibraryScreenContent() {
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('components.tracks')}</Text>
           <FlatList
             data={likedTracks}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item, index) => `${String(item?.id ?? 'track')}-${index}`}
             renderItem={({ item, index }) => {
               const isActiveTrack = currentTrack?.id?.toString() === item.id?.toString();
               const isCurrentlyPlaying = isActiveTrack && isPlaying;
@@ -436,7 +442,7 @@ function LibraryScreenContent() {
               cover: (() => {
                 if (selectedPlaylist.trackIds.length > 0) {
                   const lastTrackId = selectedPlaylist.trackIds[selectedPlaylist.trackIds.length - 1];
-                  const track = [...likedTracks, ...playlistTracks].find(t => t.id.toString() === lastTrackId);
+                  const track = [...likedTracks, ...playlistTracks].find(t => String(t?.id ?? '') === lastTrackId);
                   if (track && track.images) {
                     return MusicAPI.getOptimalImage(track.images);
                   }
@@ -452,7 +458,7 @@ function LibraryScreenContent() {
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t('components.tracks')}</Text>
           <FlatList
             data={playlistTracks}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item, index) => `${String(item?.id ?? 'track')}-${index}`}
             renderItem={({ item, index }) => {
               const isActiveTrack = currentTrack?.id?.toString() === item.id?.toString();
               const isCurrentlyPlaying = isActiveTrack && isPlaying;
@@ -505,7 +511,7 @@ function LibraryScreenContent() {
                         color={isLiked(item.id) ? theme.accent : theme.textPrimary}
                       />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.playlistIconButton} onPress={() => handleRemoveTrackFromPlaylist(item.id.toString(), selectedPlaylist.name)}>
+                    <TouchableOpacity style={styles.playlistIconButton} onPress={() => handleRemoveTrackFromPlaylist(String(item?.id ?? ''), selectedPlaylist.name)}>
                       <Ionicons name="trash" size={20} color="#ff4444" />
                     </TouchableOpacity>
                   </View>
